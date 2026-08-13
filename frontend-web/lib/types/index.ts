@@ -36,6 +36,8 @@ export interface ServiceItem {
   description?: string
   price: number
   type: 'service' | 'part'
+  code?: string
+  barcode?: string
 }
 
 export interface OrderLineItem {

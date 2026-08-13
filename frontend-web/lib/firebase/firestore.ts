@@ -51,6 +51,22 @@ export async function createService(clientId: string, data: Omit<ServiceItem, 'i
   return addDoc(col(clientId, 'services'), { ...data, clientId })
 }
 
+/**
+ * Bulk import for one-off catalog migrations (e.g. importing a legacy
+ * system's product/service list). Writes concurrently in chunks to avoid
+ * saturating the connection with hundreds of simultaneous requests.
+ */
+export async function createServicesBulk(
+  clientId: string,
+  items: Omit<ServiceItem, 'id' | 'clientId'>[]
+) {
+  const CHUNK_SIZE = 25
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    const chunk = items.slice(i, i + CHUNK_SIZE)
+    await Promise.all(chunk.map((item) => createService(clientId, item)))
+  }
+}
+
 // --- Orders ---
 export function watchOrders(clientId: string, cb: (items: Order[]) => void) {
   const q = query(col(clientId, 'orders'), orderBy('createdAt', 'desc'))

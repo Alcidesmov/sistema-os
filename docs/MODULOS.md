@@ -94,6 +94,8 @@ Catálogo de itens reutilizáveis para montar orçamentos rapidamente.
 
 | Campo | Obrigatório |
 |---|---|
+| Código | Não — código interno de referência (ex.: do sistema legado da oficina), texto livre |
+| Cód. barras | Não — texto livre |
 | Nome | Sim |
 | Tipo | Sim — `service` (serviço) ou `part` (peça) |
 | Preço | Sim — número, formatado como BRL na exibição |
