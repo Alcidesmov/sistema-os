@@ -1,9 +1,7 @@
 export type OrderStatus =
-  | 'draft'
-  | 'quoted'
-  | 'approved'
-  | 'in_progress'
-  | 'completed'
+  | 'diagnostico'
+  | 'em_servico'
+  | 'finalizado'
   | 'invoiced'
 
 export interface Vehicle {

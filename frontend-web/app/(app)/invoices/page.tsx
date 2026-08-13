@@ -34,7 +34,7 @@ export default function InvoicesPage() {
   }, [clientId])
 
   const pending = useMemo(
-    () => orders.filter((o) => o.status === 'completed' && o.invoiceRequested && !o.invoiceId),
+    () => orders.filter((o) => o.status === 'finalizado' && o.invoiceRequested && !o.invoiceId),
     [orders]
   )
 

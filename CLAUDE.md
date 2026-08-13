@@ -6,10 +6,13 @@
 > junto com o commit que a introduz. Ver seção "Histórico de Versões" no
 > final.
 
-**Versão atual: v0.2.2** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
+**Versão atual: v0.3.0** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
 completas. Ambiente de emissão de NF pronto em modo de teste (Fase 3 em
 andamento, provedor real ainda não conectado). Catálogo completo de
-serviços/peças (~165 itens) importado do sistema legado.
+serviços/peças (~165 itens) importado do sistema legado. Workflow de OS
+migrado para o modelo de 3 estágios (Diagnóstico → Em Serviço →
+Finalizado) do sistema de referência, com suporte a item avulso
+(preço sem serviço/peça do catálogo) no Diagnóstico.
 
 **Documentação complementar** (este arquivo é o resumo geral; para
 detalhe, ver):
@@ -119,11 +122,13 @@ Fonte de verdade: `frontend-web/lib/types/index.ts`.
 - **`ServiceItem`** — item de catálogo: `name`, `price`, `type`
   (`service | part`). Usado para montar orçamentos rapidamente.
 - **`Order`** — a Ordem de Serviço. Campos-chave:
-  - `status: OrderStatus` = `draft | quoted | approved | in_progress | completed | invoiced`
-    (`draft` existe no tipo mas **não é usado na prática** — toda OS já
-    nasce como `quoted`, ver seção 6.5)
+  - `status: OrderStatus` = `diagnostico | em_servico | finalizado | invoiced`
+    (modelo de 3 estágios + faturamento, ver seção 6.5)
   - `items: OrderLineItem[]` — linhas do orçamento (serviço/peça, qtd,
-    preço unitário, subtotal)
+    preço unitário, subtotal). Pode incluir itens "avulsos" (sem
+    `itemId` de um `ServiceItem` real — só um id gerado no cliente),
+    usados no Diagnóstico quando o preço já é conhecido mas o
+    serviço/peça exato ainda não foi definido.
   - `totalValue`, `quoteApprovedAt?`, `executionStartedAt?`,
     `executionEstimatedEnd?`, `executionCompletedAt?`
   - `invoiceRequested?: boolean` — dono da oficina "flegou" pra emitir NF
@@ -172,15 +177,18 @@ itens clicáveis.
   novo; seleciona veículo existente (filtrado pelo cliente) OU digita
   placa+modelo de um novo; clica nos itens do catálogo pra montar o
   orçamento (quantidade soma automaticamente se clicar de novo no mesmo
-  item); total calculado em tempo real. Ao submeter, cria cliente/veículo
-  novos se necessário e a OS já nasce com `status: 'quoted'`.
+  item), ou lança um **item avulso** (descrição + tipo + preço livre,
+  sem vincular ao catálogo — pra quando ainda não se sabe o
+  serviço/peça exato, só o preço estimado); total calculado em tempo
+  real. Ao submeter, cria cliente/veículo novos se necessário e a OS já
+  nasce com `status: 'diagnostico'`.
 - **Detalhe e workflow** (`orders/[id]/page.tsx`): botões de ação mudam
   conforme o `status` atual:
-  - `quoted` → botão "Aprovar orçamento" → `approved`
-  - `approved` → campo de prazo opcional + botão "Iniciar serviço" →
-    `in_progress`
-  - `in_progress` → botão "Concluir serviço" → `completed`
-  - `completed` (sem `invoiceRequested`) → botão "Marcar para emissão de
+  - `diagnostico` → campo de prazo opcional + botão "Aprovar orçamento e
+    abrir O.S." → `em_servico` (aprovação já inicia a execução, num só
+    passo)
+  - `em_servico` → botão "Concluir serviço" → `finalizado`
+  - `finalizado` (sem `invoiceRequested`) → botão "Marcar para emissão de
     NF" → seta `invoiceRequested: true` (não muda o `status` ainda)
   - Depois de flegado, a OS entra na fila do módulo de Notas Fiscais (5.7)
 - **`app/(app)/orders/page.tsx` também é a tela de listagem** — tabela com
@@ -249,12 +257,28 @@ de emissão) vs. o que ainda precisa ser validado com o suporte.
 conta MecOS cadastra e gerencia N empresas (uma por oficina-cliente),
 cada uma com certificado digital próprio vinculado individualmente.
 
-### 6.5 `OrderStatus` tem um valor (`draft`) que não é usado
-O tipo `OrderStatus` inclui `'draft'`, mas nenhuma OS é criada com esse
-status hoje — `createOrder` sempre grava `status: 'quoted'` direto (criar
-o orçamento = já é a submissão pro cliente aprovar). Se um fluxo de
-rascunho salvo-mas-não-enviado for necessário no futuro, `draft` já existe
-no tipo, só falta a UI usar.
+### 6.5 `OrderStatus`: modelo de 3 estágios (Diagnóstico → Em Serviço → Finalizado)
+Desde a v0.3.0, `OrderStatus` é `diagnostico | em_servico | finalizado |
+invoiced` — substituiu o modelo anterior (`draft | quoted | approved |
+in_progress | completed | invoiced`), baseado no sistema de referência do
+Alcides (vídeo `IMG_0949.MOV`). Mudanças em relação ao modelo antigo:
+
+- `quoted`+`approved` viraram só `diagnostico`: a OS nasce em
+  `diagnostico` (é o orçamento, ainda "sem O.S." no sentido do sistema de
+  referência) e a aprovação já abre a OS direto em `em_servico` — não há
+  mais um estágio intermediário "aprovado mas execução não iniciada".
+- `in_progress` virou `em_servico`; `completed` virou `finalizado`.
+- `draft` (que nunca foi usado) foi removido do tipo.
+- Novo: itens de linha "avulsos" — no Diagnóstico, dá pra lançar um preço
+  sem vincular a um `ServiceItem` do catálogo (campo separado em
+  `NewOrderForm`), pra quando o valor já é estimável mas o serviço/peça
+  exato ainda não foi definido. Gera um `OrderLineItem` normal, só com
+  `itemId` gerado no cliente em vez do id de um item real do catálogo.
+
+Não existe migração de dados antigos — como é MVP sem dados de produção
+reais, a troca foi direta no código; qualquer OS de teste criada com os
+status antigos ficaria com um `status` que não bate mais com o tipo
+(não há dados assim conhecidos hoje).
 
 ### 6.6 Git push: Bash é bloqueado pelo classificador de auto mode
 Comandos `git push` (mesmo com token embutido na URL) são bloqueados pelo
@@ -309,6 +333,15 @@ que fica versionado como referência.
 > Atualizar esta seção a cada mudança relevante — resumo curto, não
 > changelog verboso linha-a-linha (isso já existe no `git log`).
 
+- **v0.3.0** (2026-08-13) — Workflow de OS refeito para o modelo de 3
+  estágios do sistema de referência: `OrderStatus` agora é `diagnostico |
+  em_servico | finalizado | invoiced` (era `draft | quoted | approved |
+  in_progress | completed | invoiced`). A aprovação do orçamento agora
+  abre a OS direto em "Em Serviço" num só passo (sem estágio
+  intermediário "aprovado mas não iniciado"). Novo: item avulso no
+  formulário de criação — permite lançar um preço estimado no Diagnóstico
+  sem vincular a um serviço/peça do catálogo. Ver `CLAUDE.md` seção 6.5 e
+  `docs/MODULOS.md` seção 6.
 - **v0.2.2** (2026-08-13) — Catálogo de Serviços e Peças ganhou campos
   `código`/`cód. barras`, importação em lote (textarea, formato
   `código;barras;nome;tipo;preço`) e exclusão por linha

@@ -105,7 +105,7 @@ export async function createOrder(
   return addDoc(col(clientId, 'orders'), {
     ...data,
     clientId,
-    status: 'quoted' as OrderStatus,
+    status: 'diagnostico' as OrderStatus,
     createdAt: now,
     updatedAt: now,
   })

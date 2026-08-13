@@ -15,20 +15,16 @@ import {
 import { Order, Customer, Vehicle, ServiceItem, OrderLineItem, OrderStatus } from '@/lib/types'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  draft: 'Rascunho',
-  quoted: 'Aguardando aprovação',
-  approved: 'Aprovada',
-  in_progress: 'Em execução',
-  completed: 'Concluída',
+  diagnostico: 'Diagnóstico',
+  em_servico: 'Em Serviço',
+  finalizado: 'Finalizado',
   invoiced: 'Faturada',
 }
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
-  draft: 'bg-gray-100 text-gray-700',
-  quoted: 'bg-amber-100 text-amber-700',
-  approved: 'bg-blue-100 text-blue-700',
-  in_progress: 'bg-purple-100 text-purple-700',
-  completed: 'bg-green-100 text-green-700',
+  diagnostico: 'bg-amber-100 text-amber-700',
+  em_servico: 'bg-purple-100 text-purple-700',
+  finalizado: 'bg-green-100 text-green-700',
   invoiced: 'bg-teal-100 text-teal-700',
 }
 
@@ -153,6 +149,10 @@ function NewOrderForm({
   const [lineItems, setLineItems] = useState<OrderLineItem[]>([])
   const [saving, setSaving] = useState(false)
 
+  const [avulsoDesc, setAvulsoDesc] = useState('')
+  const [avulsoType, setAvulsoType] = useState<'service' | 'part'>('service')
+  const [avulsoPrice, setAvulsoPrice] = useState('')
+
   const filteredVehicles = useMemo(
     () => vehicles.filter((v) => v.customerId === customerId),
     [vehicles, customerId]
@@ -189,6 +189,24 @@ function NewOrderForm({
 
   const removeItem = (itemId: string) => {
     setLineItems((prev) => prev.filter((i) => i.itemId !== itemId))
+  }
+
+  const addAvulsoItem = () => {
+    const price = parseFloat(avulsoPrice.replace(',', '.'))
+    if (!avulsoDesc || Number.isNaN(price)) return
+    setLineItems((prev) => [
+      ...prev,
+      {
+        itemId: crypto.randomUUID(),
+        type: avulsoType,
+        description: avulsoDesc,
+        quantity: 1,
+        unitPrice: price,
+        subtotal: price,
+      },
+    ])
+    setAvulsoDesc('')
+    setAvulsoPrice('')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -346,6 +364,44 @@ function NewOrderForm({
           )}
         </div>
 
+        <div className="mt-3 rounded-lg border border-dashed border-gray-300 p-3">
+          <label className="mb-2 block text-xs font-medium text-gray-600">
+            Item avulso — ainda em diagnóstico, sem serviço/peça definido do catálogo
+          </label>
+          <div className="flex flex-wrap items-end gap-2">
+            <input
+              value={avulsoDesc}
+              onChange={(e) => setAvulsoDesc(e.target.value)}
+              placeholder="Descrição (ex.: estimativa inicial)"
+              className="min-w-[180px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+            <select
+              value={avulsoType}
+              onChange={(e) => setAvulsoType(e.target.value as 'service' | 'part')}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="service">Serviço</option>
+              <option value="part">Peça</option>
+            </select>
+            <input
+              value={avulsoPrice}
+              onChange={(e) => setAvulsoPrice(e.target.value)}
+              type="number"
+              step="0.01"
+              placeholder="Preço"
+              className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={addAvulsoItem}
+              disabled={!avulsoDesc || !avulsoPrice}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:border-blue-500 hover:text-blue-600 disabled:opacity-50"
+            >
+              + Adicionar
+            </button>
+          </div>
+        </div>
+
         {lineItems.length > 0 && (
           <div className="mt-3 space-y-1 rounded-lg border border-gray-200 p-3">
             {lineItems.map((i) => (
@@ -380,7 +436,7 @@ function NewOrderForm({
         disabled={saving || lineItems.length === 0}
         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
       >
-        {saving ? 'Criando...' : 'Criar orçamento (OS)'}
+        {saving ? 'Criando...' : 'Criar diagnóstico / orçamento'}
       </button>
     </form>
   )

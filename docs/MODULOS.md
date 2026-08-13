@@ -136,31 +136,43 @@ Fluxo desenhado para **mínimo de cliques**, tudo numa única tela:
 3. **Itens**: clicar nos "chips" de serviços/peças do catálogo adiciona à
    lista; clicar de novo no mesmo item soma a quantidade. Botão "remover"
    por item. Total recalculado em tempo real.
-4. Submeter cria (se necessário) cliente/veículo novos e grava a OS já
-   com **`status: 'quoted'`** — não existe rascunho intermediário no
-   fluxo de criação (embora o tipo `OrderStatus` tenha `'draft'`, ver
-   `CLAUDE.md` seção 6.5).
+4. **Item avulso**: campo separado (descrição + tipo + preço) para lançar
+   um valor estimado **sem vincular a um item do catálogo** — pensado
+   para o estágio de Diagnóstico, quando ainda não se sabe qual
+   serviço/peça exato vai ser usado, mas já se quer registrar um preço.
+   Gera uma linha normal em `items` (mesmo formato dos itens de
+   catálogo), só que com um `itemId` gerado (`crypto.randomUUID()`) em
+   vez do id de um `ServiceItem` real.
+5. Submeter cria (se necessário) cliente/veículo novos e grava a OS já
+   com **`status: 'diagnostico'`** — esse é o único ponto de entrada, não
+   existe uma etapa de "rascunho" antes disso.
 
 **Validação:** botão de submit só habilita se houver pelo menos 1 item no
-orçamento. Cliente/veículo são obrigatórios (existente ou novo com os
-campos mínimos preenchidos).
+orçamento (de catálogo ou avulso). Cliente/veículo são obrigatórios
+(existente ou novo com os campos mínimos preenchidos).
 
 ### 6.2 Detalhe e workflow (`orders/[id]/page.tsx`)
+
+Modelo de 3 estágios (mais um estágio final de faturamento), baseado no
+sistema de referência do Alcides — ver vídeo `IMG_0949.MOV`: Diagnóstico
+gera um orçamento; se aprovado, abre a O.S. e ela fica "Em Serviço"; ao
+terminar, "Finalizado".
 
 Mostra itens, total, timestamps de cada etapa, e os botões de ação mudam
 conforme `status`:
 
 | Status atual | Ação disponível | Efeito |
 |---|---|---|
-| `quoted` | "Aprovar orçamento" | → `approved`, grava `quoteApprovedAt` |
-| `approved` | Campo de prazo (opcional) + "Iniciar serviço" | → `in_progress`, grava `executionStartedAt` e, se prazo preenchido, `executionEstimatedEnd` |
-| `in_progress` | "Concluir serviço" | → `completed`, grava `executionCompletedAt` |
-| `completed` (sem NF pedida) | "Marcar para emissão de NF" | Seta `invoiceRequested: true` — **não muda o status** |
-| `completed` (com NF pedida, não emitida) | — | Mostra link "acompanhar na emissão em lote" → `/invoices` |
+| `diagnostico` | Campo de prazo (opcional) + "Aprovar orçamento e abrir O.S." | → `em_servico`, grava `quoteApprovedAt` **e** `executionStartedAt` juntos (a aprovação já inicia a execução — não existe um estágio intermediário "aprovado mas não iniciado") e, se prazo preenchido, `executionEstimatedEnd` |
+| `em_servico` | "Concluir serviço" | → `finalizado`, grava `executionCompletedAt` |
+| `finalizado` (sem NF pedida) | "Marcar para emissão de NF" | Seta `invoiceRequested: true` — **não muda o status** |
+| `finalizado` (com NF pedida, não emitida) | — | Mostra link "acompanhar na emissão em lote" → `/invoices` |
 | `invoiced` | — | Mostra link "ver documento" → `/invoices` |
 
 Não há botão de "voltar status" nem de cancelar uma OS — o fluxo é
-estritamente sequencial pra frente.
+estritamente sequencial pra frente. Não há mais um estágio `approved`
+separado de `in_progress` (existia antes da v0.3.0 — ver `CLAUDE.md`
+seção 6.5 para o histórico dessa mudança).
 
 ### 6.3 Listagem (`orders/page.tsx`, tabela abaixo do formulário)
 

@@ -19,8 +19,8 @@ export default function DashboardPage() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const todayOrders = orders.filter((o) => o.createdAt >= today.getTime())
-    const awaitingApproval = orders.filter((o) => o.status === 'quoted')
-    const inProgress = orders.filter((o) => o.status === 'in_progress')
+    const awaitingApproval = orders.filter((o) => o.status === 'diagnostico')
+    const inProgress = orders.filter((o) => o.status === 'em_servico')
     const totalMonth = orders
       .filter((o) => {
         const d = new Date(o.createdAt)
@@ -45,8 +45,8 @@ export default function DashboardPage() {
 
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard label="OS hoje" value={stats.todayCount} />
-        <StatCard label="Aguardando aprovação" value={stats.awaitingApproval} />
-        <StatCard label="Em execução" value={stats.inProgress} />
+        <StatCard label="Em diagnóstico" value={stats.awaitingApproval} />
+        <StatCard label="Em serviço" value={stats.inProgress} />
         <StatCard
           label="Faturamento do mês"
           value={stats.totalMonth.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}

@@ -10,11 +10,9 @@ import { updateOrderStatus, requestInvoice } from '@/lib/firebase/firestore'
 import { Order, OrderStatus } from '@/lib/types'
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
-  draft: 'Rascunho',
-  quoted: 'Aguardando aprovação',
-  approved: 'Aprovada',
-  in_progress: 'Em execução',
-  completed: 'Concluída',
+  diagnostico: 'Diagnóstico',
+  em_servico: 'Em Serviço',
+  finalizado: 'Finalizado',
   invoiced: 'Faturada',
 }
 
@@ -37,16 +35,17 @@ export default function OrderDetailPage() {
     return <p className="text-sm text-gray-500">Carregando...</p>
   }
 
-  const approve = () => updateOrderStatus(clientId, order.id, 'approved', { quoteApprovedAt: Date.now() })
-
-  const startExecution = () => {
-    const extra: Record<string, unknown> = { executionStartedAt: Date.now() }
+  const approveAndOpen = () => {
+    const extra: Record<string, unknown> = {
+      quoteApprovedAt: Date.now(),
+      executionStartedAt: Date.now(),
+    }
     if (deadline) extra.executionEstimatedEnd = new Date(deadline).getTime()
-    updateOrderStatus(clientId, order.id, 'in_progress', extra)
+    updateOrderStatus(clientId, order.id, 'em_servico', extra)
   }
 
   const complete = () =>
-    updateOrderStatus(clientId, order.id, 'completed', { executionCompletedAt: Date.now() })
+    updateOrderStatus(clientId, order.id, 'finalizado', { executionCompletedAt: Date.now() })
 
   const askInvoice = () => requestInvoice(clientId, order.id)
 
@@ -122,16 +121,7 @@ export default function OrderDetailPage() {
 
         {/* Workflow actions */}
         <div className="mt-6 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
-          {order.status === 'quoted' && (
-            <button
-              onClick={approve}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Aprovar orçamento
-            </button>
-          )}
-
-          {order.status === 'approved' && (
+          {order.status === 'diagnostico' && (
             <div className="flex items-end gap-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">
@@ -145,15 +135,15 @@ export default function OrderDetailPage() {
                 />
               </div>
               <button
-                onClick={startExecution}
-                className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+                onClick={approveAndOpen}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
               >
-                Iniciar serviço
+                Aprovar orçamento e abrir O.S.
               </button>
             </div>
           )}
 
-          {order.status === 'in_progress' && (
+          {order.status === 'em_servico' && (
             <button
               onClick={complete}
               className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
@@ -162,7 +152,7 @@ export default function OrderDetailPage() {
             </button>
           )}
 
-          {order.status === 'completed' && !order.invoiceRequested && (
+          {order.status === 'finalizado' && !order.invoiceRequested && (
             <button
               onClick={askInvoice}
               className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
