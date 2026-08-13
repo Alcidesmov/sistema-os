@@ -76,3 +76,19 @@ export interface Client {
   email?: string
   phone?: string
 }
+
+export type InvoiceKind = 'nfe' | 'nfse'
+
+export interface Invoice {
+  id: string
+  clientId: string
+  orderId: string
+  customerName: string
+  provider: string
+  kind: InvoiceKind
+  number: string
+  totalValue: number
+  documentContent: string
+  documentUrl?: string
+  issuedAt: number
+}

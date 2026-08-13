@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
@@ -101,7 +102,22 @@ export default function OrderDetailPage() {
           {order.executionCompletedAt && (
             <p>Serviço concluído em {new Date(order.executionCompletedAt).toLocaleString('pt-BR')}</p>
           )}
-          {order.invoiceRequested && <p>✓ NF solicitada — entrará na próxima emissão em lote</p>}
+          {order.invoiceRequested && order.status !== 'invoiced' && (
+            <p>
+              ✓ NF solicitada —{' '}
+              <Link href="/invoices" className="text-blue-600 hover:underline">
+                acompanhar na emissão em lote
+              </Link>
+            </p>
+          )}
+          {order.status === 'invoiced' && (
+            <p>
+              ✓ NF emitida —{' '}
+              <Link href="/invoices" className="text-blue-600 hover:underline">
+                ver documento
+              </Link>
+            </p>
+          )}
         </div>
 
         {/* Workflow actions */}

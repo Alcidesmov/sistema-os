@@ -123,6 +123,7 @@ export default function ReportsPage() {
         <div className="border-b border-gray-100 px-4 py-3">
           <h2 className="text-sm font-semibold text-gray-900">Por tipo de veículo</h2>
         </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
             <tr>
@@ -150,6 +151,7 @@ export default function ReportsPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

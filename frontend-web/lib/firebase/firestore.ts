@@ -3,13 +3,14 @@ import {
   doc,
   addDoc,
   updateDoc,
+  getDoc,
   onSnapshot,
   query,
   orderBy,
-  Timestamp,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { Customer, Vehicle, ServiceItem, Order, OrderStatus, OrderLineItem } from '@/lib/types'
+import { Customer, Vehicle, ServiceItem, Order, OrderStatus, OrderLineItem, Client, Invoice } from '@/lib/types'
+import { activeInvoiceProvider } from '@/lib/invoices/provider'
 
 const col = (clientId: string, name: string) =>
   collection(db, 'clients', clientId, name)
@@ -94,6 +95,47 @@ export async function updateOrderStatus(
 export async function requestInvoice(clientId: string, orderId: string) {
   const ref = doc(db, 'clients', clientId, 'orders', orderId)
   return updateDoc(ref, { invoiceRequested: true, updatedAt: Date.now() })
+}
+
+// --- Client (oficina) info ---
+export async function getClient(clientId: string): Promise<Client> {
+  const snap = await getDoc(doc(db, 'clients', clientId))
+  return { id: clientId, ...(snap.data() as Omit<Client, 'id'>) }
+}
+
+// --- Invoices ---
+export function watchInvoices(clientId: string, cb: (items: Invoice[]) => void) {
+  const q = query(col(clientId, 'invoices'), orderBy('issuedAt', 'desc'))
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Invoice)))
+  })
+}
+
+/**
+ * Emits an invoice for a single order using whichever provider is
+ * currently active (see lib/invoices/provider.ts). Writes the invoice
+ * record and flips the order to "invoiced".
+ */
+export async function emitInvoiceForOrder(clientId: string, order: Order) {
+  const client = await getClient(clientId)
+  const result = await activeInvoiceProvider.emit(order, client)
+
+  const invoiceRef = await addDoc(col(clientId, 'invoices'), {
+    clientId,
+    orderId: order.id,
+    customerName: order.customerName,
+    provider: result.provider,
+    kind: result.kind,
+    number: result.number,
+    totalValue: result.totalValue,
+    documentContent: result.documentContent,
+    documentUrl: result.documentUrl ?? null,
+    issuedAt: Date.now(),
+  })
+
+  await updateOrderStatus(clientId, order.id, 'invoiced', { invoiceId: invoiceRef.id })
+
+  return invoiceRef.id
 }
 
 // --- Feedback / melhorias ---

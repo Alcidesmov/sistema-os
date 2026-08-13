@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/customers', label: 'Clientes' },
   { href: '/vehicles', label: 'Veículos' },
   { href: '/services', label: 'Serviços e Peças' },
+  { href: '/invoices', label: 'Notas Fiscais' },
   { href: '/reports', label: 'Relatórios' },
   { href: '/feedback', label: 'Melhorias' },
 ]

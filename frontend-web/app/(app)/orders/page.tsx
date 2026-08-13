@@ -77,6 +77,7 @@ export default function OrdersPage() {
       )}
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
             <tr>
@@ -122,6 +123,7 @@ export default function OrdersPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )
