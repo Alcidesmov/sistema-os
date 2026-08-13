@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useClientId } from '@/lib/hooks/useClientId'
-import { watchServices, createService, createServicesBulk } from '@/lib/firebase/firestore'
+import { watchServices, createService, createServicesBulk, deleteService } from '@/lib/firebase/firestore'
 import { ServiceItem } from '@/lib/types'
 
 function parseBulkLine(line: string): Omit<ServiceItem, 'id' | 'clientId'> | null {
@@ -184,6 +184,7 @@ export default function ServicesPage() {
               <th className="px-4 py-3">Nome</th>
               <th className="px-4 py-3">Tipo</th>
               <th className="px-4 py-3">Preço</th>
+              <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -198,11 +199,19 @@ export default function ServicesPage() {
                 <td className="px-4 py-3 text-gray-600">
                   {s.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => clientId && deleteService(clientId, s.id)}
+                    className="text-xs text-red-500 hover:underline"
+                  >
+                    excluir
+                  </button>
+                </td>
               </tr>
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                   Nenhum serviço/peça cadastrado ainda
                 </td>
               </tr>

@@ -62,6 +62,7 @@ Formulário inline no topo da lista (sem modal/rota separada):
 | E-mail | Não | — |
 
 Não há edição nem exclusão de clientes na UI ainda — só criar e listar.
+Diferente de Serviços e Peças (que já tem exclusão, ver seção 5).
 Não há verificação de duplicidade (pode cadastrar o mesmo cliente duas
 vezes com nomes diferentes).
 
@@ -103,6 +104,18 @@ Catálogo de itens reutilizáveis para montar orçamentos rapidamente.
 O tipo (`service`/`part`) importa para: (a) exibição na listagem, e (b)
 no `mockInvoiceProvider`, decide se a nota gerada é classificada como
 `nfse` (só serviços) ou `nfe` (tem pelo menos uma peça) — ver seção 8.
+
+**Exclusão**: cada linha tem um botão "excluir" (`deleteService` em
+`lib/firebase/firestore.ts`) — sem confirmação, remove direto. Não há
+edição inline ainda; pra corrigir um item hoje o fluxo é excluir e
+recriar pelo formulário (`updateService` já existe em `firestore.ts` mas
+não está ligado a nenhuma UI).
+
+**Importação em lote**: botão "Importar em lote" abre um textarea onde
+cada linha é um item no formato `código;cód.barras;nome;tipo(S ou
+P);preço` (usado para trazer o catálogo do sistema legado). Usado uma
+vez para importar o catálogo completo (~165 itens) a partir de vídeos do
+sistema antigo — ver `docs/ROADMAP.md`.
 
 ---
 
@@ -234,8 +247,9 @@ conectado ainda.
   uma vez. Aceitável para o volume do MVP; revisar se alguma oficina
   crescer muito (milhares de registros).
 - **Sem edição/exclusão** na maioria dos cadastros simples (clientes,
-  veículos, serviços) — só criar e listar. Editar/excluir é um gap
-  conhecido, não uma omissão acidental — não foi pedido ainda.
+  veículos) — só criar e listar. Editar/excluir é um gap conhecido, não
+  uma omissão acidental — não foi pedido ainda. Serviços e Peças é
+  exceção: já tem exclusão (ver seção 5).
 - **Formatação de moeda**: sempre via
   `value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })`
   — manter esse padrão em telas novas.

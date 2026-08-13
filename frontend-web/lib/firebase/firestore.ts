@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteDoc,
   getDoc,
   onSnapshot,
   query,
@@ -49,6 +50,18 @@ export function watchServices(clientId: string, cb: (items: ServiceItem[]) => vo
 
 export async function createService(clientId: string, data: Omit<ServiceItem, 'id' | 'clientId'>) {
   return addDoc(col(clientId, 'services'), { ...data, clientId })
+}
+
+export async function deleteService(clientId: string, id: string) {
+  return deleteDoc(doc(db, 'clients', clientId, 'services', id))
+}
+
+export async function updateService(
+  clientId: string,
+  id: string,
+  data: Partial<Omit<ServiceItem, 'id' | 'clientId'>>
+) {
+  return updateDoc(doc(db, 'clients', clientId, 'services', id), data)
 }
 
 /**

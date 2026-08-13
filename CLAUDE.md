@@ -6,9 +6,10 @@
 > junto com o commit que a introduz. Ver seção "Histórico de Versões" no
 > final.
 
-**Versão atual: v0.2.1** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
+**Versão atual: v0.2.2** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
 completas. Ambiente de emissão de NF pronto em modo de teste (Fase 3 em
-andamento, provedor real ainda não conectado).
+andamento, provedor real ainda não conectado). Catálogo completo de
+serviços/peças (~165 itens) importado do sistema legado.
 
 **Documentação complementar** (este arquivo é o resumo geral; para
 detalhe, ver):
@@ -308,6 +309,12 @@ que fica versionado como referência.
 > Atualizar esta seção a cada mudança relevante — resumo curto, não
 > changelog verboso linha-a-linha (isso já existe no `git log`).
 
+- **v0.2.2** (2026-08-13) — Catálogo de Serviços e Peças ganhou campos
+  `código`/`cód. barras`, importação em lote (textarea, formato
+  `código;barras;nome;tipo;preço`) e exclusão por linha
+  (`deleteService`/`updateService` em `lib/firebase/firestore.ts`, esse
+  último ainda sem UI). Catálogo completo do sistema legado (~165 itens)
+  extraído de vídeos e importado, com duplicatas resolvidas manualmente.
 - **v0.2.0** (2026-08-13) — Ambiente de emissão de NF criado
   (provider-agnostic, `mockInvoiceProvider`), tela "Notas Fiscais" com fila
   + emissão em lote + visualização de documento de teste. Pesquisa completa
