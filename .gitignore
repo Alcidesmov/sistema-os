@@ -7,15 +7,13 @@ node_modules/
 .env
 .env.local
 .env.*.local
-.env.example
 
 # Build outputs
-/build
-/dist
-/.next
-/out
-.expo
+build/
 dist/
+.next/
+out/
+.expo
 
 # IDE
 .vscode/
