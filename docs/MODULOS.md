@@ -1,0 +1,239 @@
+# Detalhamento Funcional dos Módulos — MecOS
+
+Este documento descreve, tela por tela, o que cada módulo faz, quais
+campos existem e quais regras de negócio estão implementadas. É o
+complemento "funcional" do `CLAUDE.md` (que é mais focado em arquitetura
+e convenções técnicas). Se um comportamento aqui descrito não bate com o
+código, o código é a verdade — atualize este arquivo.
+
+---
+
+## 1. Autenticação
+
+**Rota:** `/login` · **Arquivo:** `app/login/page.tsx`
+
+- Uma única tela alterna entre "Entrar" e "Cadastrar sua oficina" (toggle,
+  não são rotas separadas).
+- Campos: e-mail, senha (mínimo 6 caracteres, exigido pelo Firebase Auth).
+- **Cadastro = criação da oficina.** Não existe uma tela separada de
+  "criar empresa" — ao criar a conta, o sistema automaticamente:
+  1. Cria `users/{uid}` com `clientId = uid`
+  2. Cria `clients/{uid}` com nome derivado do e-mail (parte antes do `@`)
+  3. Redireciona para o dashboard
+- Erros de login/cadastro mostram mensagem genérica (não expõe se o
+  e-mail existe ou não, por segurança).
+
+---
+
+## 2. Dashboard (Visão Geral)
+
+**Rota:** `/dashboard` · **Arquivo:** `app/(app)/dashboard/page.tsx`
+
+Cartões de estatística (calculados client-side a partir de todas as OS
+carregadas via `onSnapshot`, não é uma agregação no servidor):
+
+| Cartão | Cálculo |
+|---|---|
+| OS hoje | OS com `createdAt >=` início do dia atual |
+| Aguardando aprovação | OS com `status === 'quoted'` |
+| Em execução | OS com `status === 'in_progress'` |
+| Faturamento do mês | Soma de `totalValue` de OS criadas no mês corrente |
+
+Abaixo, lista das 8 OS mais recentes (nome do cliente, veículo, valor),
+cada uma linkando para o detalhe.
+
+**Limitação conhecida:** como tudo é calculado no cliente a partir de
+todas as OS, isso não escala bem para oficinas com milhares de OS —
+funciona bem para o volume esperado do MVP, mas se isso virar gargalo,
+considerar agregação no servidor (Cloud Function) ou paginação.
+
+---
+
+## 3. Clientes
+
+**Rota:** `/customers` · **Arquivo:** `app/(app)/customers/page.tsx`
+
+Formulário inline no topo da lista (sem modal/rota separada):
+
+| Campo | Obrigatório | Observação |
+|---|---|---|
+| Nome | Sim | — |
+| Telefone | Sim | Sem máscara/validação de formato |
+| E-mail | Não | — |
+
+Não há edição nem exclusão de clientes na UI ainda — só criar e listar.
+Não há verificação de duplicidade (pode cadastrar o mesmo cliente duas
+vezes com nomes diferentes).
+
+---
+
+## 4. Veículos
+
+**Rota:** `/vehicles` · **Arquivo:** `app/(app)/vehicles/page.tsx`
+
+| Campo | Obrigatório | Observação |
+|---|---|---|
+| Placa | Sim | Convertida para maiúsculas automaticamente, sem validação de formato Mercosul/antigo |
+| Marca | Não | — |
+| Modelo | Sim | — |
+| Ano | Não | Texto livre, não é `number` |
+| Cor | Não | — |
+| Tipo | Sim | `carro \| moto \| caminhao \| outro`, usado no relatório por tipo |
+| Cliente | Sim | Select vinculando a um `Customer` já cadastrado |
+
+Um veículo pertence a exatamente um cliente (`customerId`). Não há
+edição/exclusão na UI ainda.
+
+---
+
+## 5. Serviços e Peças (catálogo)
+
+**Rota:** `/services` · **Arquivo:** `app/(app)/services/page.tsx`
+
+Catálogo de itens reutilizáveis para montar orçamentos rapidamente.
+
+| Campo | Obrigatório |
+|---|---|
+| Nome | Sim |
+| Tipo | Sim — `service` (serviço) ou `part` (peça) |
+| Preço | Sim — número, formatado como BRL na exibição |
+
+O tipo (`service`/`part`) importa para: (a) exibição na listagem, e (b)
+no `mockInvoiceProvider`, decide se a nota gerada é classificada como
+`nfse` (só serviços) ou `nfe` (tem pelo menos uma peça) — ver seção 8.
+
+---
+
+## 6. Ordens de Serviço (módulo central)
+
+**Rotas:** `/orders` (lista + criação) e `/orders/[id]` (detalhe/workflow)
+
+### 6.1 Criação (`orders/page.tsx`, componente `NewOrderForm`)
+
+Fluxo desenhado para **mínimo de cliques**, tudo numa única tela:
+
+1. **Cliente**: select de clientes existentes, OU deixar em branco e
+   preencher nome+telefone de um cliente novo (criado no submit).
+2. **Veículo**: select filtrado pelos veículos do cliente escolhido, OU
+   deixar em branco e preencher placa+modelo de um veículo novo (criado
+   com `brand/year/color` vazios e `type: 'carro'` por padrão — **não há
+   como escolher o tipo do veículo nesta tela**, só na tela de Veículos).
+3. **Itens**: clicar nos "chips" de serviços/peças do catálogo adiciona à
+   lista; clicar de novo no mesmo item soma a quantidade. Botão "remover"
+   por item. Total recalculado em tempo real.
+4. Submeter cria (se necessário) cliente/veículo novos e grava a OS já
+   com **`status: 'quoted'`** — não existe rascunho intermediário no
+   fluxo de criação (embora o tipo `OrderStatus` tenha `'draft'`, ver
+   `CLAUDE.md` seção 6.5).
+
+**Validação:** botão de submit só habilita se houver pelo menos 1 item no
+orçamento. Cliente/veículo são obrigatórios (existente ou novo com os
+campos mínimos preenchidos).
+
+### 6.2 Detalhe e workflow (`orders/[id]/page.tsx`)
+
+Mostra itens, total, timestamps de cada etapa, e os botões de ação mudam
+conforme `status`:
+
+| Status atual | Ação disponível | Efeito |
+|---|---|---|
+| `quoted` | "Aprovar orçamento" | → `approved`, grava `quoteApprovedAt` |
+| `approved` | Campo de prazo (opcional) + "Iniciar serviço" | → `in_progress`, grava `executionStartedAt` e, se prazo preenchido, `executionEstimatedEnd` |
+| `in_progress` | "Concluir serviço" | → `completed`, grava `executionCompletedAt` |
+| `completed` (sem NF pedida) | "Marcar para emissão de NF" | Seta `invoiceRequested: true` — **não muda o status** |
+| `completed` (com NF pedida, não emitida) | — | Mostra link "acompanhar na emissão em lote" → `/invoices` |
+| `invoiced` | — | Mostra link "ver documento" → `/invoices` |
+
+Não há botão de "voltar status" nem de cancelar uma OS — o fluxo é
+estritamente sequencial pra frente.
+
+### 6.3 Listagem (`orders/page.tsx`, tabela abaixo do formulário)
+
+Todas as OS da oficina, mais recentes primeiro. Colunas: cliente, veículo,
+status (com badge colorida por status), total, data de criação. Clicar
+na linha (no nome do cliente) vai para o detalhe.
+
+---
+
+## 7. Relatórios
+
+**Rota:** `/reports` · **Arquivo:** `app/(app)/reports/page.tsx`
+
+- Filtro por período: campos "De" e "Até" (input `type="date"`). Filtra
+  por `createdAt` da OS — **não** por data de conclusão ou de emissão de
+  NF.
+- Cartões: total de OS no período, valor total no período.
+- Tabela "Por tipo de veículo": agrupa as OS filtradas pelo `type` do
+  veículo vinculado, soma quantidade e valor.
+- Botão "Exportar CSV": baixa todas as OS do período filtrado (data,
+  cliente, veículo, placa, tipo, status, valor) num arquivo `.csv` com
+  BOM UTF-8 (abre corretamente acentuado no Excel).
+
+**Limitação conhecida:** o requisito original pedia XMLs para
+contabilidade (comércio) e arquivos de NF de serviço — isso **não está
+implementado** aqui, depende da Fase 3/4 (integração real de NF, ver
+`docs/ROADMAP.md`).
+
+---
+
+## 8. Notas Fiscais
+
+**Rota:** `/invoices` · **Arquivo:** `app/(app)/invoices/page.tsx`
+
+Banner fixo no topo avisa: **modo de teste**, nenhum provedor real
+conectado ainda.
+
+- **Fila "Aguardando emissão"**: toda OS com `status === 'completed'`,
+  `invoiceRequested === true` e sem `invoiceId` ainda. Checkbox de seleção
+  múltipla (com "selecionar todas") + botão "Emitir selecionadas".
+- **Emissão em lote**: para cada OS selecionada, chama
+  `emitInvoiceForOrder(clientId, order)` (`lib/firebase/firestore.ts`),
+  que:
+  1. Busca o documento `Client` da oficina
+  2. Chama `activeInvoiceProvider.emit(order, client)` — hoje sempre o
+     `mockInvoiceProvider`
+  3. Grava um documento em `clients/{clientId}/invoices`
+  4. Atualiza a OS: `status: 'invoiced'` + `invoiceId`
+- **Lista "Emitidas"**: todas as notas já emitidas, com botão "Ver
+  documento" que baixa um `.html` (o "documento de teste" gerado pelo
+  mock — tem um aviso visual grande de que não tem valor fiscal).
+- **Classificação NFS-e vs NF-e** (campo `kind` do mock): se a OS tem
+  algum item `type: 'part'`, o mock marca como `nfe`; senão, `nfse`. Isso
+  é só a lógica do **mock** — o provedor real pode (e provavelmente vai)
+  precisar emitir NF-e **e** NFS-e separadamente para uma mesma OS mista,
+  ver `docs/ENOTA-API.md` seção 9 (gaps).
+
+---
+
+## 9. Melhorias (sugestões)
+
+**Rota:** `/feedback` · **Componentes:** `components/layout/FeedbackButton.tsx` + `app/(app)/feedback/page.tsx`
+
+- Botão flutuante "💡 Sugerir melhoria" fica fixo no canto inferior
+  direito, renderizado uma única vez no `DashboardShell` — aparece em
+  **todas** as telas da área logada.
+- Modal simples: textarea de mensagem. Ao enviar, grava
+  `{ message, page (rota de origem), userEmail, status: 'new', createdAt }`.
+- Tela `/feedback` lista tudo (mais recente primeiro), mostra a página de
+  origem e o e-mail de quem enviou. Cada sugestão tem 4 pills de status
+  clicáveis (`new / reviewing / done / rejected`) — clicar muda o status
+  direto no Firestore, sem confirmação.
+- Botão "Exportar JSON" baixa todas as sugestões (com todos os campos)
+  num arquivo `.json` — atende diretamente o requisito original de
+  "cair num JSON pra análise".
+
+---
+
+## Padrões transversais (valem para toda tela de listagem)
+
+- **Tempo real**: todas as listas usam `onSnapshot` do Firestore — mudanças
+  aparecem automaticamente sem precisar recarregar a página.
+- **Sem paginação**: toda lista carrega 100% dos documentos da coleção de
+  uma vez. Aceitável para o volume do MVP; revisar se alguma oficina
+  crescer muito (milhares de registros).
+- **Sem edição/exclusão** na maioria dos cadastros simples (clientes,
+  veículos, serviços) — só criar e listar. Editar/excluir é um gap
+  conhecido, não uma omissão acidental — não foi pedido ainda.
+- **Formatação de moeda**: sempre via
+  `value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })`
+  — manter esse padrão em telas novas.

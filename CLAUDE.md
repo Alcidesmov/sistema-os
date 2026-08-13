@@ -6,9 +6,17 @@
 > junto com o commit que a introduz. Ver seção "Histórico de Versões" no
 > final.
 
-**Versão atual: v0.2.0** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
+**Versão atual: v0.2.1** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
 completas. Ambiente de emissão de NF pronto em modo de teste (Fase 3 em
 andamento, provedor real ainda não conectado).
+
+**Documentação complementar** (este arquivo é o resumo geral; para
+detalhe, ver):
+- [`docs/MODULOS.md`](docs/MODULOS.md) — cada tela, campo por campo, regra por regra
+- [`docs/GUIA-VISUAL.md`](docs/GUIA-VISUAL.md) — padrão visual (cores, componentes)
+- [`docs/TESTES.md`](docs/TESTES.md) — o que já foi verificado manualmente
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — fases detalhadas com critério de "pronto"
+- [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) · [`docs/FIREBASE-SETUP.md`](docs/FIREBASE-SETUP.md) · [`docs/ENOTA-API.md`](docs/ENOTA-API.md)
 
 ---
 
@@ -306,6 +314,16 @@ que fica versionado como referência.
   da API eNotas/Nota Gateway documentada em `docs/ENOTA-API.md`
   (multi-tenant confirmado). Correção de `overflow-x-auto` em todas as
   tabelas. Criação deste arquivo `CLAUDE.md`.
+- **v0.2.1** (2026-08-13) — Documentação expandida: `docs/MODULOS.md`
+  (detalhamento funcional campo a campo), `docs/GUIA-VISUAL.md` (padrão
+  visual extraído do código real), `docs/TESTES.md` (checklist de
+  verificação manual — não há testes automatizados ainda),
+  `docs/ROADMAP.md` (fases com critério de "pronto"). `README.md`
+  reescrito para refletir o estado real do projeto (estava desatualizado
+  desde a Fase 1). Também foi criado
+  `~/projetos/TEMPLATE-NOVO-PROJETO.md`, um guia reutilizável para
+  scaffolding de documentação em projetos futuros, baseado no processo
+  usado aqui.
 - **v0.1.0** (2026-08-12/13) — Fase 1 (setup Next.js + Expo + Firebase,
   Auth + Firestore configurados, regras de segurança publicadas) e Fase 2
   (CRUD completo: clientes, veículos, serviços/peças, OS com workflow
