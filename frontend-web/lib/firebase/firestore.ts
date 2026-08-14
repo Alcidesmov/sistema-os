@@ -132,6 +132,16 @@ export async function getClient(clientId: string): Promise<Client> {
   return { id: clientId, ...(snap.data() as Omit<Client, 'id'>) }
 }
 
+export function watchClient(clientId: string, cb: (client: Client) => void) {
+  return onSnapshot(doc(db, 'clients', clientId), (snap) => {
+    if (snap.exists()) cb({ id: clientId, ...(snap.data() as Omit<Client, 'id'>) })
+  })
+}
+
+export async function updateClient(clientId: string, data: Partial<Omit<Client, 'id'>>) {
+  return updateDoc(doc(db, 'clients', clientId), data)
+}
+
 // --- Invoices ---
 export function watchInvoices(clientId: string, cb: (items: Invoice[]) => void) {
   const q = query(col(clientId, 'invoices'), orderBy('issuedAt', 'desc'))

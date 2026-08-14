@@ -3,19 +3,27 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // MVP: clientId === owner's uid. Each oficina owner reads/writes
-    // only their own user doc, their own client doc, and everything
-    // nested under clients/{clientId} where clientId == their uid.
+    // users/{uid} is a lightweight lookup doc: uid -> which oficina
+    // (clientId) they belong to + their role. It's what lets multiple
+    // uids (gestor, supervisor, mecânico, recepcionista) share the same
+    // oficina's data instead of clientId always equaling a single uid.
+    // Every authenticated user can only read/write their own lookup doc.
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
     match /clients/{clientId} {
-      allow read, write: if request.auth != null && request.auth.uid == clientId;
+      allow read, write: if isMember(clientId);
 
       match /{document=**} {
-        allow read, write: if request.auth != null && request.auth.uid == clientId;
+        allow read, write: if isMember(clientId);
       }
+    }
+
+    function isMember(clientId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId;
     }
   }
 }

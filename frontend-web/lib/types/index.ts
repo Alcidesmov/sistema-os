@@ -72,9 +72,41 @@ export interface Order {
 export interface Client {
   id: string
   name: string
+  razaoSocial?: string
+  nomeFantasia?: string
   cnpj?: string
+  address?: string
   email?: string
   phone?: string
+}
+
+export type UserRole = 'gestor' | 'supervisor' | 'mecanico' | 'recepcionista'
+
+export const USER_ROLE_LABEL: Record<UserRole, string> = {
+  gestor: 'Gestor',
+  supervisor: 'Supervisor',
+  mecanico: 'Mecânico',
+  recepcionista: 'Recepcionista',
+}
+
+// users/{uid} — documento enxuto usado só pra resolver uid -> oficina
+// (bootstrap do login e regra de segurança). Não usar pra listar membros.
+export interface UserLookup {
+  clientId: string
+  email: string
+  role: UserRole
+  createdAt: number
+}
+
+// clients/{clientId}/members/{uid} — espelha UserLookup, mas vive dentro
+// do tenant pra poder ser listado (ver Usuários) sob a mesma regra de
+// segurança que já vale pra customers/vehicles/services/orders.
+export interface Member {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  createdAt: number
 }
 
 export type InvoiceKind = 'nfe' | 'nfse'

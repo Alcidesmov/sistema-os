@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useClientId } from '@/lib/hooks/useClientId'
 import { watchServices, createService, createServicesBulk, deleteService } from '@/lib/firebase/firestore'
 import { ServiceItem } from '@/lib/types'
+import { normalize } from '@/lib/utils/search'
 
 function parseBulkLine(line: string): Omit<ServiceItem, 'id' | 'clientId'> | null {
   const parts = line.split(';').map((p) => p.trim())
@@ -28,14 +29,27 @@ export default function ServicesPage() {
   const [type, setType] = useState<ServiceItem['type']>('service')
   const [saving, setSaving] = useState(false)
   const [showBulk, setShowBulk] = useState(false)
+  const [showAddForm, setShowAddForm] = useState(false)
   const [bulkText, setBulkText] = useState('')
   const [bulkImporting, setBulkImporting] = useState(false)
   const [bulkResult, setBulkResult] = useState('')
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!clientId) return
     return watchServices(clientId, setItems)
   }, [clientId])
+
+  const filteredItems = useMemo(() => {
+    const q = normalize(query.trim())
+    if (!q) return items
+    return items.filter(
+      (s) =>
+        normalize(s.name).includes(q) ||
+        (s.code && normalize(s.code).includes(q)) ||
+        (s.barcode && normalize(s.barcode).includes(q))
+    )
+  }, [items, query])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,8 +87,33 @@ export default function ServicesPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Serviços e Peças</h1>
+      <h1 className="mb-4 text-2xl font-bold text-gray-900">Serviços e Peças</h1>
+
+      <div className="mb-6">
+        <label className="mb-1 block text-xs font-medium text-gray-600">
+          Buscar no catálogo
+        </label>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Digite o nome, código ou código de barras..."
+          autoFocus
+          className="w-full max-w-lg rounded-lg border border-gray-300 px-4 py-3 text-base shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+        {query.trim() && (
+          <p className="mt-1 text-xs text-gray-500">
+            {filteredItems.length} de {items.length} itens
+          </p>
+        )}
+      </div>
+
+      <div className="mb-6 flex items-center gap-4 border-t border-gray-200 pt-4">
+        <button
+          onClick={() => setShowAddForm((s) => !s)}
+          className="text-sm font-medium text-blue-600 hover:underline"
+        >
+          {showAddForm ? 'Fechar cadastro' : '+ Cadastrar novo item'}
+        </button>
         <button
           onClick={() => setShowBulk((s) => !s)}
           className="text-sm font-medium text-blue-600 hover:underline"
@@ -110,6 +149,7 @@ export default function ServicesPage() {
         </div>
       )}
 
+      {showAddForm && (
       <form
         onSubmit={handleSubmit}
         className="mb-8 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4"
@@ -173,6 +213,7 @@ export default function ServicesPage() {
           {saving ? 'Salvando...' : '+ Adicionar'}
         </button>
       </form>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="overflow-x-auto">
@@ -188,7 +229,7 @@ export default function ServicesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {items.map((s) => (
+            {filteredItems.map((s) => (
               <tr key={s.id}>
                 <td className="px-4 py-3 text-gray-600">{s.code || '—'}</td>
                 <td className="px-4 py-3 text-gray-600">{s.barcode || '—'}</td>
@@ -209,10 +250,12 @@ export default function ServicesPage() {
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {filteredItems.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
-                  Nenhum serviço/peça cadastrado ainda
+                  {items.length === 0
+                    ? 'Nenhum serviço/peça cadastrado ainda'
+                    : 'Nenhum item encontrado pra essa busca'}
                 </td>
               </tr>
             )}

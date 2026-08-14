@@ -35,6 +35,15 @@ real ainda — ver roadmap em `CLAUDE.md`.
 
 ## Quick Start
 
+### Jeito rápido (Alcides): duplo clique
+
+Dê duplo clique em [`INICIAR_MECOS.command`](INICIAR_MECOS.command), na raiz
+do projeto. Ele instala as dependências na primeira vez, sobe o servidor e
+abre `http://localhost:3000` sozinho. Para encerrar, feche a janela do
+Terminal ou `Ctrl+C`.
+
+### Manual (linha de comando)
+
 ### 1. Instalar dependências
 
 ```bash

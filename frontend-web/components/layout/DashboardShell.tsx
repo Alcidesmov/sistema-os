@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/hooks/useAuth'
+import { UserRole } from '@/lib/types'
 import FeedbackButton from '@/components/layout/FeedbackButton'
 
 const NAV_ITEMS = [
@@ -16,10 +17,23 @@ const NAV_ITEMS = [
   { href: '/feedback', label: 'Melhorias' },
 ]
 
-export default function DashboardShell({ children }: { children: React.ReactNode }) {
+// Só o gestor vê/mexe no cadastro da oficina e nos usuários.
+const GESTOR_ONLY_NAV_ITEMS = [
+  { href: '/oficina', label: 'Oficina' },
+  { href: '/usuarios', label: 'Usuários' },
+]
+
+export default function DashboardShell({
+  children,
+  role,
+}: {
+  children: React.ReactNode
+  role: UserRole | null
+}) {
   const pathname = usePathname()
   const router = useRouter()
   const { user, signOut } = useAuth()
+  const navItems = role === 'gestor' ? [...NAV_ITEMS, ...GESTOR_ONLY_NAV_ITEMS] : NAV_ITEMS
 
   const handleSignOut = async () => {
     await signOut()
@@ -33,7 +47,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           <h1 className="text-lg font-bold text-gray-900">MecOS</h1>
         </div>
         <nav className="flex-1 space-y-1 p-3">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = pathname === item.href
             return (
               <Link

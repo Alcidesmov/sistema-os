@@ -36,10 +36,18 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="mb-1 text-2xl font-bold text-gray-900">MecOS</h1>
-        <p className="mb-6 text-sm text-gray-500">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-lg">
+        {/* Logo + Branding */}
+        <div className="mb-6 text-center">
+          <div className="mb-3 text-4xl">🔧</div>
+          <h1 className="mb-1 text-3xl font-bold text-gray-900">MecOS</h1>
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+            Gestão de Ordens de Serviço
+          </p>
+        </div>
+
+        <p className="mb-6 text-center text-sm text-gray-500">
           {mode === 'login' ? 'Entre para acessar o sistema' : 'Crie a conta da sua oficina'}
         </p>
 

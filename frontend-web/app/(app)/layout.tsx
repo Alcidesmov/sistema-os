@@ -9,7 +9,7 @@ import DashboardShell from '@/components/layout/DashboardShell'
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
-  const { clientId, loading: clientLoading } = useClientId()
+  const { clientId, role, loading: clientLoading } = useClientId()
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -25,7 +25,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     )
   }
 
-  return <DashboardShell>{children}</DashboardShell>
+  return <DashboardShell role={role}>{children}</DashboardShell>
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

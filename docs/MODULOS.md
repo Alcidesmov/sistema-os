@@ -15,13 +15,19 @@ código, o código é a verdade — atualize este arquivo.
 - Uma única tela alterna entre "Entrar" e "Cadastrar sua oficina" (toggle,
   não são rotas separadas).
 - Campos: e-mail, senha (mínimo 6 caracteres, exigido pelo Firebase Auth).
-- **Cadastro = criação da oficina.** Não existe uma tela separada de
-  "criar empresa" — ao criar a conta, o sistema automaticamente:
-  1. Cria `users/{uid}` com `clientId = uid`
+- **Cadastro = criação de uma oficina nova.** Não existe uma tela
+  separada de "criar empresa" — ao criar a conta, o sistema
+  automaticamente:
+  1. Cria `users/{uid}` com `clientId = uid`, `role: 'gestor'`
   2. Cria `clients/{uid}` com nome derivado do e-mail (parte antes do `@`)
-  3. Redireciona para o dashboard
+  3. Cria `clients/{uid}/members/{uid}` (pra aparecer na tela "Usuários")
+  4. Redireciona para o dashboard
 - Erros de login/cadastro mostram mensagem genérica (não expõe se o
   e-mail existe ou não, por segurança).
+- **Esse formulário só serve pra criar uma oficina nova.** Funcionários
+  de uma oficina existente (supervisor/mecânico/recepcionista) não usam
+  "Cadastrar" — o gestor cria o login deles direto na tela "Usuários"
+  (seção 12) e passa a senha; eles só usam "Entrar" aqui.
 
 ---
 
@@ -93,6 +99,18 @@ edição/exclusão na UI ainda.
 
 Catálogo de itens reutilizáveis para montar orçamentos rapidamente.
 
+**Busca** (desde v0.4.1, layout corrigido em v0.4.2): é a **primeira
+coisa na tela**, com label "Buscar no catálogo" e foco automático —
+filtra por nome, código ou código de barras conforme digita
+(`normalize()` de `lib/utils/search.ts`). Sem isso, o catálogo de ~165
+itens ficava ilegível de rolar. Ver `CLAUDE.md` 6.11 pro padrão geral.
+
+**Cadastrar novo item**: formulário escondido atrás do link "+ Cadastrar
+novo item" (mesmo padrão do "Importar em lote" logo ao lado) — fica
+fechado por padrão pra não competir visualmente com a busca (era logo
+abaixo dela antes da v0.4.2, e o Alcides já digitou no campo "Nome" do
+formulário achando que era a busca).
+
 | Campo | Obrigatório |
 |---|---|
 | Código | Não — código interno de referência (ex.: do sistema legado da oficina), texto livre |
@@ -133,9 +151,13 @@ Fluxo desenhado para **mínimo de cliques**, tudo numa única tela:
    deixar em branco e preencher placa+modelo de um veículo novo (criado
    com `brand/year/color` vazios e `type: 'carro'` por padrão — **não há
    como escolher o tipo do veículo nesta tela**, só na tela de Veículos).
-3. **Itens**: clicar nos "chips" de serviços/peças do catálogo adiciona à
-   lista; clicar de novo no mesmo item soma a quantidade. Botão "remover"
-   por item. Total recalculado em tempo real.
+3. **Itens**: campo de busca com autocomplete (desde v0.4.0 — antes
+   listava todos os ~165 itens do catálogo como botões de uma vez, virou
+   ilegível e foi trocado). Digita nome, código ou código de barras;
+   dropdown com até 8 resultados, navegável por ↑↓/Enter; clicar (ou
+   Enter) adiciona à lista e limpa a busca. Clicar de novo no mesmo item
+   soma a quantidade. Botão "remover" por item. Total recalculado em
+   tempo real.
 4. **Item avulso**: campo separado (descrição + tipo + preço) para lançar
    um valor estimado **sem vincular a um item do catálogo** — pensado
    para o estágio de Diagnóstico, quando ainda não se sabe qual
@@ -248,6 +270,37 @@ conectado ainda.
 - Botão "Exportar JSON" baixa todas as sugestões (com todos os campos)
   num arquivo `.json` — atende diretamente o requisito original de
   "cair num JSON pra análise".
+
+---
+
+## 10. Oficina (desde v0.4.0)
+
+**Rota:** `/oficina` · **Arquivo:** `app/(app)/oficina/page.tsx` · **Só gestor**
+
+Cadastro da oficina: nome fantasia, razão social, CNPJ, telefone,
+endereço, e-mail de contato. Pré-carrega de `clients/{clientId}`
+(`watchClient`), salva com `updateClient` (grava só os campos
+preenchidos, não sobrescreve com vazio — mesmo padrão condicional já
+usado em outros formulários pro gotcha do `undefined`, ver `CLAUDE.md`
+6.1). Papéis diferentes de gestor veem uma mensagem de acesso restrito em
+vez do formulário.
+
+## 11. Usuários (desde v0.4.0)
+
+**Rota:** `/usuarios` · **Arquivo:** `app/(app)/usuarios/page.tsx` · **Só gestor**
+
+- **Lista**: nome, e-mail, papel, data de criação — vem de
+  `clients/{clientId}/members` (`watchMembers`).
+- **Criar usuário**: formulário com nome, e-mail, senha temporária
+  (pré-preenchida com uma senha aleatória de 8 caracteres, editável) e
+  papel (gestor/supervisor/mecânico/recepcionista). Ao criar, mostra um
+  aviso com e-mail+senha pra repassar ao funcionário — **não existe envio
+  automático nem tela de "trocar senha"** ainda.
+- Cria o login via `createMember` (`lib/firebase/members.ts`), que usa
+  uma segunda instância do Firebase App pra não derrubar a sessão do
+  gestor (ver `CLAUDE.md` seção 3.1 pro porquê técnico).
+- Papéis diferentes de gestor veem uma mensagem de acesso restrito em vez
+  da tela.
 
 ---
 
