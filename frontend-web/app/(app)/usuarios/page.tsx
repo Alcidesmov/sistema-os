@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useClientId } from '@/lib/hooks/useClientId'
-import { watchMembers, createMember } from '@/lib/firebase/members'
+import { watchMembers, createMember } from '@/lib/firebase/provisioning'
 import { Member, UserRole, USER_ROLE_LABEL } from '@/lib/types'
 
 function generatePassword() {

@@ -1,29 +1,127 @@
 rules_version = '2';
 
+// =====================================================================
+// MecOS — regras v0.5.0
+//
+// DUAS MUDANÇAS NESTA VERSÃO, leia antes de mexer:
+//
+// (1) FECHA UM FURO DE ISOLAMENTO ENTRE OFICINAS que existe na regra
+// anterior (guardada em firestore.rules.bak-v04). Lá:
+//
+//     match /users/{uid} { allow read, write: if request.auth.uid == uid; }
+//
+// ou seja, QUALQUER usuário autenticado podia reescrever o PRÓPRIO
+// documento de lookup apontando pra outra oficina:
+//
+//     setDoc(doc(db,'users',meuUid), { clientId: '<id alheio>', role: 'gestor' })
+//
+// e, como isMember() só compara users/{uid}.clientId com o clientId
+// acessado, passava a ler E ESCREVER catálogo, clientes, veículos, O.S.
+// e notas fiscais de uma oficina alheia — dado real de cliente final.
+// Agora só quem já é gestor da oficina DE DESTINO (ou o administrador
+// do sistema) pode criar/editar o lookup de outro uid — ver isGestor().
+//
+// (2) ADICIONA O ADMINISTRADOR SISTÊMICO (platformAdmins/{uid}), cujo
+// ÚNICO poder é cadastrar/listar/suspender OFICINAS — o cadastro raso
+// (nome, CNPJ, situação), NUNCA o conteúdo de dentro delas. O admin NÃO
+// tem `read`/`write` na subárvore clients/{clientId}/{document=**}:
+// catálogo, clientes, veículos, O.S. e notas fiscais de cada oficina
+// continuam visíveis SÓ para quem é isMember() daquela oficina. Isso é
+// deliberado — o pedido foi "é ele quem cadastra novas oficinas,
+// ninguém mais", não visibilidade sobre o negócio de cada oficina.
+//
+// NÃO publique este arquivo por CLI (não existe firebase-tools aqui):
+// a publicação é manual pelo console — ver CLAUDE.md 6.10 e
+// docs/ADMIN-RUNBOOK.md pro bootstrap do primeiro admin.
+// =====================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // users/{uid} is a lightweight lookup doc: uid -> which oficina
-    // (clientId) they belong to + their role. It's what lets multiple
-    // uids (gestor, supervisor, mecânico, recepcionista) share the same
-    // oficina's data instead of clientId always equaling a single uid.
-    // Every authenticated user can only read/write their own lookup doc.
-    match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
+    // ----- helpers -----
 
-    match /clients/{clientId} {
-      allow read, write: if isMember(clientId);
-
-      match /{document=**} {
-        allow read, write: if isMember(clientId);
-      }
+    // O documento de lookup do usuário logado: { clientId, email, role }.
+    // Só chame depois de garantir que ele existe (isMember faz isso).
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isMember(clientId) {
       return request.auth != null &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId;
+        me().clientId == clientId;
+    }
+
+    // A tolerância `!('role' in me())` é OBRIGATÓRIA: o cliente resolve o
+    // papel como `data.role ?? 'gestor'`, então o documento do dono
+    // original pode não ter o campo `role` gravado. Sem essa tolerância,
+    // publicar esta regra trancaria o próprio dono fora de Oficina e
+    // Usuários.
+    function isGestor(clientId) {
+      return isMember(clientId) && (me().role == 'gestor' || !('role' in me()));
+    }
+
+    // Administrador SISTÊMICO da plataforma. A coleção é semeada à mão
+    // pelo console do Firebase (escrita pelo console faz bypass das
+    // regras), por isso ela pode ser write:false aqui — ver
+    // docs/ADMIN-RUNBOOK.md.
+    function isPlatformAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid));
+    }
+
+    // ----- platformAdmins -----
+
+    match /platformAdmins/{uid} {
+      // Todo usuário logado consegue ler o PRÓPRIO doc — é assim que o
+      // app descobre, no login, se deve mandar a pessoa pra /admin.
+      allow get: if request.auth != null && (request.auth.uid == uid || isPlatformAdmin());
+      allow list: if isPlatformAdmin();
+      // Ninguém promove ninguém pelo app. Só o console do Firebase.
+      allow write: if false;
+    }
+
+    // ----- users/{uid} : lookup uid -> oficina -----
+
+    match /users/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || isPlatformAdmin());
+      allow list: if isPlatformAdmin();
+
+      // Quem cria/edita o vínculo é o gestor da oficina de DESTINO
+      // (request.resource.data.clientId), não o próprio usuário.
+      allow create, update: if isPlatformAdmin() || isGestor(request.resource.data.clientId);
+
+      // Linha separada de propósito: num delete, request.resource é null,
+      // então o ramo do gestor precisa olhar resource.data (o documento
+      // que já está gravado). Juntar com o create/update faria o delete
+      // nunca ser autorizado pra gestor.
+      allow delete: if isPlatformAdmin() || isGestor(resource.data.clientId);
+    }
+
+    // ----- clients/{clientId} : a oficina e tudo dentro dela -----
+
+    match /clients/{clientId} {
+      allow get: if isMember(clientId) || isPlatformAdmin();
+
+      // Cadastrar/apagar oficina é exclusivo do administrador do sistema
+      // ("é ele quem cadastra novas oficinas, ninguém mais"). `list` só
+      // pro admin porque é o que alimenta a tela /admin — nenhuma oficina
+      // enxerga a lista das outras.
+      allow list, create, delete: if isPlatformAdmin();
+
+      // Editar o cadastro da oficina (CNPJ, razão social...) é do gestor.
+      allow update: if isGestor(clientId) || isPlatformAdmin();
+
+      // Toda a subárvore — members, customers, vehicles, services,
+      // orders (+ orders/*/history, counters), invoices, feedback — é
+      // EXCLUSIVA de isMember(). O admin sistêmico NÃO entra aqui: ele
+      // administra o CADASTRO da oficina (nome, CNPJ, situação), não o
+      // negócio dela. O pedido foi "é ele quem cadastra novas oficinas,
+      // ninguém mais" — não visibilidade sobre clientes/veículos/O.S. de
+      // cada oficina, que seguem isolados como sempre foram.
+      match /{document=**} {
+        allow read, write: if isMember(clientId);
+      }
     }
   }
 }

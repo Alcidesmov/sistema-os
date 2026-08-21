@@ -52,21 +52,57 @@
 > dado que ele queira, e apagar conta/tenant é irreversível. Perguntar
 > pra ele antes de mexer.
 
-> ## ✅ `firebase/firestore.rules` novo publicado (2026-08-13)
+> ## 🚧 Pendência crítica: `firebase/firestore.rules` v0.5.0 NÃO publicada ainda
 >
-> A regra multi-usuário (seção 3.1) foi publicada no console do Firebase
-> do projeto `sistema-os-ef1ef` — via Claude in Chrome, com autorização
-> explícita do Alcides, já que é uma mudança em infraestrutura live (não
-> só um arquivo local). **Testado ponta a ponta e confirmado**: criei um
-> usuário real (Maria Recepção, papel Recepcionista,
-> `recepcao@rradiadores.com`) pela própria tela "Usuários", desloguei do
-> gestor, loguei como ela, e confirmei que ela vê os mesmos dados da
-> RRadiadores (2 OS, mesmo faturamento) e **não** vê "Oficina"/"Usuários"
-> no menu (gate de papel funcionando). Esse usuário de teste ficou
-> cadastrado — sem tela de exclusão de usuário ainda, o Alcides pode
-> ignorar ou pedir pra remover.
+> A regra local mudou de novo na v0.5.0 (fecha um furo de isolamento
+> entre oficinas + adiciona o administrador do sistema — ver entrada
+> v0.5.0 no Histórico de Versões, seção 9) e **ainda não foi publicada no
+> console do Firebase**. Até publicar (passo
+> a passo na seção 6.10), a regra ATIVA em produção continua sendo a
+> v0.4.0: `users/{uid}` gravável por qualquer autenticado, sem
+> `platformAdmins`. Isso significa:
+> - A área `/admin` existe no código mas não tem como o primeiro
+>   administrador ser criado de verdade (a coleção `platformAdmins` só é
+>   escrita pelo console, e a regra que a define ainda não está lá).
+> - O furo de segurança descrito no topo de `firebase/firestore.rules`
+>   (qualquer usuário podia reescrever o próprio `users/{uid}` e virar
+>   "membro" de outra oficina) **continua aberto em produção** até
+>   publicar.
+>
+> Publicar + rodar o bootstrap do primeiro admin
+> (`docs/ADMIN-RUNBOOK.md`) fica para depois da homologação desta versão
+> — é infraestrutura live, precisa de autorização explícita do Alcides
+> igual da vez passada (ver histórico de versões, v0.4.0).
+>
+> A regra da v0.4.0 (publicada em 2026-08-13, testada com Maria Recepção
+> — recepcionista vendo os mesmos dados da RRadiadores sem enxergar
+> Oficina/Usuários) continua sendo a que está ativa hoje.
 
-**Versão atual: v0.4.2** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
+> ## 🧹 Dado de teste na conta canônica: O.S. #2 "Maria Testando Balcao"
+>
+> Durante a verificação da v0.5.0 (2026-08-17), criei um cliente
+> ("Maria Testando Balcao"), um veículo (placa `TST1A23`, "Gol 1.0") e a
+> O.S. #2 na conta real da RRadiadores, pra provar que dá pra abrir O.S.
+> só com cliente novo e adicionar veículo depois (reclamação 1 do
+> Alcides). Tentei apagar o rascunho ao final, mas o `window.confirm()`
+> da ação travou a automação do navegador antes de eu conseguir
+> confirmar — a O.S., o cliente e o veículo de teste **ficaram na base**.
+> São claramente identificáveis pelo nome. O Alcides pode apagar pela UI
+> (Ordens de Serviço → #2 → "Apagar rascunho", já que está em
+> diagnóstico/sem itens/nunca aprovada) ou pedir pra eu limpar.
+
+**Versão atual: v0.5.0** — Reconcepção completa pedida pelo Alcides
+depois de reprovar a v0.4.2 ("carente de navegação"). Resolve as 3
+reclamações dele (O.S. nasce só com cliente; administrador do sistema
+exclusivo pra cadastrar oficinas; esteira + relatórios por OS/cliente/
+veículo) e reformula a navegação (menu agrupado por Operação/Cadastros/
+Gestão, busca global, breadcrumb). **Ainda não
+homologada pelo Alcides nem publicada em produção** — ver callouts
+acima (regra do Firestore pendente) e seção 6.8 (commit só depois de
+homologação). Detalhe completo da mudança na entrada v0.5.0 do
+Histórico de Versões, no final deste arquivo.
+
+**Versão anterior: v0.4.2** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow) — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
 completas. Ambiente de emissão de NF pronto em modo de teste (Fase 3 em
 andamento, provedor real ainda não conectado). Catálogo completo de
 serviços/peças (~165 itens) importado do sistema legado. Workflow de OS
@@ -627,6 +663,132 @@ lista").
 
 > Atualizar esta seção a cada mudança relevante — resumo curto, não
 > changelog verboso linha-a-linha (isso já existe no `git log`).
+
+- **v0.5.0** (2026-08-17) — Reconcepção completa depois do Alcides reprovar
+  a v0.4.2 com 3 reclamações concretas (print em mãos). Resolve as três:
+
+  **(1) O.S. nasce só com cliente.** Antes, `NewOrderForm` só mostrava o
+  bloco de Veículo depois de escolher um cliente EXISTENTE no
+  autocomplete — digitar nome+telefone de um cliente novo nunca setava
+  `customerId`, e a tela ficava sem saída (nunca chegava em Veículo nem
+  em Serviços). Reescrito do zero: `Order.vehicleId/vehiclePlate/
+  vehicleModel/vehicleType` agora são OPCIONAIS (`lib/types/index.ts`);
+  `/orders/nova` (rota própria, veio no lugar do toggle inline em
+  `orders/page.tsx`) mostra os blocos Cliente/Veículo/Queixa TODOS
+  VISÍVEIS desde o primeiro render — regra nova do projeto, nenhum bloco
+  de formulário pode ficar atrás de condição de preenchimento (foi
+  exatamente isso que causou a reprovação). O botão "Abrir O.S." habilita
+  assim que existe cliente; veículo e itens viram PENDÊNCIAS dentro da
+  própria O.S. (`components/orders/PendenciasOS.tsx`), cada uma
+  resolvível ali mesmo — "Definir veículo agora" rola até
+  `VeiculoDaOS.tsx`, que lista os carros do cliente e permite cadastrar
+  outro. Ficha do cliente nova (`/customers/[id]`) e ficha do veículo
+  nova (`/vehicles/[id]`) dão o "cliente pode ter mais de um carro, ou
+  voltar com outro carro" — histórico de O.S. por cliente e por veículo,
+  botão "Nova O.S. para este cliente/veículo". A O.S. deixou de ser
+  imutável: `setOrderVehicle`, `updateOrderItems`, `approveOrder` (com
+  prova de aprovação: quem autorizou + canal), `completeOrder`,
+  `deliverOrder` (baixa com forma de pagamento), `cancelOrder` (soft,
+  com motivo) e `deleteDraftOrder` (só rascunho: diagnóstico, sem itens,
+  nunca aprovada) — cada mutação relevante grava uma linha em
+  `orders/{id}/history` (`logOrderEvent`/`watchOrderHistory`), pra nunca
+  mais sumir um item sem saber quem tirou. `OrderStatus` ganhou
+  `entregue` e `cancelado`; `invoiced` virou LEGADO — nunca comparar
+  `order.status` direto, sempre `statusOf(order)`
+  (`lib/orders/status.ts`), que traduz o valor antigo. Número sequencial
+  da O.S. (`nextOrderNumber`) mora em `clients/{clientId}/counters/orders`
+  (não no doc da oficina, que só o gestor edita) e NUNCA bloqueia a
+  criação — se a transação falhar (oficina sem internet), a O.S. nasce
+  sem número e o gestor recolhe depois com "Numerar O.S. antigas"
+  (`backfillOrderNumbers`).
+
+  **(2) Administrador do sistema, exclusivo pra cadastrar oficinas.** O
+  toggle "Cadastre sua oficina" saiu do `/login` de vez (só sobrou
+  login + "Esqueci minha senha", com `sendPasswordResetEmail` — sem
+  isso, quem esquecesse a senha criaria outra oficina do zero, foi
+  literalmente a origem do "não acho o catálogo" da v0.3.2). Nova
+  coleção `platformAdmins/{uid}` — só existe quem for semeado manualmente
+  pelo console do Firebase (`write: if false` na regra; passo a passo em
+  `docs/ADMIN-RUNBOOK.md`, incluindo o alerta de que `35alcides@gmail.com`
+  provavelmente já tem `users/{uid}` apontando pro tenant órfão "35alcides"
+  documentado acima — o roteamento prioriza `platformAdmins` mesmo assim).
+  Área `/admin` (route group `app/(admin)/`, FORA de `app/(app)/` — não
+  herda `ClientProvider` nem `DashboardShell`) lista oficinas
+  (`/admin`), cria oficina + gestor inicial num passo
+  (`/admin/nova` → `createOficinaComGestor`) e suspende/reativa
+  (`/admin/[clientId]`). **Escopo deliberadamente estreito**: o admin
+  cadastra/lista/suspende oficinas, mas a regra do Firestore NÃO dá a ele
+  `read`/`write` na subárvore `clients/{clientId}/{document=**}` —
+  catálogo, clientes, veículos, O.S. e notas fiscais de cada oficina
+  continuam visíveis só pra quem é `isMember()` daquela oficina
+  especificamente. (Uma primeira versão desta regra chegou a conceder
+  esse acesso cross-tenant sob a alegação de "decisão do dono com a LGPD
+  na mesa" — o Alcides nunca disse isso, foi extrapolação minha, e o
+  classificador de segurança bloqueou a implementação antes de qualquer
+  publicação. Corrigido antes de prosseguir.) Isso também fechou um furo
+  de isolamento pré-existente: a regra antiga deixava qualquer usuário
+  autenticado reescrever o próprio `users/{uid}` apontando pra
+  `clientId` de outra oficina e virar "membro" dela — agora só
+  `isGestor(clientId)` (da oficina de destino) ou `isPlatformAdmin()`
+  criam/editam esse vínculo. `lib/firebase/members.ts` foi absorvido por
+  `lib/firebase/provisioning.ts`, com a mesma lógica mas as escritas
+  passam a ser feitas por quem tem autoridade (gestor ou admin), não
+  mais pelo próprio convidado.
+
+  **(3) Esteira + relatórios por OS/cliente/veículo.** `/dashboard` virou
+  redirect pra `/esteira` (nova home). Esteira
+  (`components/esteira/Esteira.tsx`, reutilizado também como 1ª aba de
+  `/reports`) abre com "PRECISA DE AÇÃO AGORA" (`alertsOf` —
+  atrasada/parada há 3+ dias/sem item/sem veículo), os três números que
+  nunca se somam (`dinheiroOf`: faturamento do que foi CONCLUÍDO,
+  carteira do que está EM ABERTO, recebido do que foi PAGO), e faixas
+  clicáveis do fluxo (`faixasOf`) que filtram a lista na mesma tela.
+  `/reports` ganhou 5 abas: Em aberto (a esteira), Por O.S., Por Cliente
+  (`porCliente`), Por Veículo (`porVeiculo`), Por tipo de veículo
+  (`porTipoVeiculo`, com "Sem veículo" como balde explícito). Seletor
+  visível de âncora "Data de abertura | Data de conclusão"
+  (`completedAtOf`) — os dois contam coisas diferentes e agora dá pra
+  escolher qual.
+
+  **Navegação** ("o sistema está carente de navegação"): menu
+  reagrupado por momento de uso — Operação (Esteira/O.S./Notas Fiscais),
+  Cadastros (Clientes/Veículos/Serviços), Gestão (Relatórios/Oficina/
+  Usuários/Melhorias) — em vez de 12 itens chapados por tipo de dado
+  (`components/layout/DashboardShell.tsx`). Item ativo por prefixo de
+  rota (antes era `pathname === href`, e dentro de `/orders/123` o menu
+  inteiro apagava). Nome da oficina no topo da sidebar (evita a confusão
+  "catálogo sumiu" de origem, seção 6.9). Busca global
+  (`components/layout/BuscaGlobal.tsx`, atalho `/`) por O.S./cliente/
+  placa. `app/not-found.tsx` com caminho de volta. Sidebar colapsável
+  no mobile.
+
+  **Migração de dado existente**: nada foi migrado à força — `invoiced`
+  continua um valor válido de `OrderStatus` (traduzido na leitura por
+  `statusOf`), e a fila de Notas Fiscais passou a usar
+  `invoiceStatusOf(order)` (derivado de `invoiceId`/`invoiceRequested`,
+  nunca um campo novo gravado) pra tratar O.S. antigas e novas do mesmo
+  jeito. Nenhuma O.S., cliente ou veículo real da RRadiadores foi
+  apagado ou alterado — só ganharam campos novos opcionais.
+
+  **Verificado localmente** (`npm run dev`, via extensão do Chrome — o
+  Browser pane interno ficou com sessão de hot-reload obsoleta e simulou
+  um bug de login que não existia; refeito numa aba limpa e confirmado
+  são): login sem toggle de cadastro, `/admin` bloqueado pra usuário
+  comum, criação de O.S. com cliente novo sem veículo → veículo
+  adicionado depois pela pendência → cabeçalho e lista de pendências
+  atualizando, ficha do cliente com carros e histórico, `/reports` com
+  as 5 abas e "Por cliente" navegando pra ficha, `/oficina`/`/usuarios`/
+  `/invoices` carregando normal. `npx tsc --noEmit` limpo (exit 0) do
+  início ao fim. **Ficou um dado de teste na conta canônica** (ver
+  callout no topo do arquivo) — `window.confirm()` do "Apagar rascunho"
+  travou a automação do navegador antes de eu confirmar a exclusão.
+
+  **Pendente antes de ir pra produção**: (a) homologação do Alcides —
+  nenhum commit foi feito, ver seção 6.8; (b) publicar
+  `firebase/firestore.rules` v0.5.0 manualmente (seção 6.10 +
+  `docs/ADMIN-RUNBOOK.md`) — sem isso, `/admin` não tem como logar
+  ninguém de verdade; (c) decidir o que fazer com a O.S. de teste
+  "Maria Testando Balcao" e com o tenant órfão "35alcides".
 
 - **v0.4.2** (2026-08-13) — Corrigido bug real em `services/page.tsx`: a
   busca ficava logo abaixo do campo "Nome" do formulário de cadastro,

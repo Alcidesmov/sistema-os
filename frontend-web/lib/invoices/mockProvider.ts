@@ -1,25 +1,49 @@
 import { Order, Client } from '@/lib/types'
 import { InvoiceProvider, InvoiceEmissionResult } from '@/lib/invoices/provider'
+import { money, vehicleLabel, orderLabel } from '@/lib/orders/format'
 
-function formatCurrency(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+/** O documento é HTML montado por interpolação — nome de cliente com `&`
+ *  ou `<` quebrava a página inteira. */
+function esc(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 function buildTestDocument(order: Order, client: Client, number: string): string {
-  const itemsHtml = order.items
+  const itemsHtml = (order.items ?? [])
     .map(
       (i) =>
-        `<tr><td>${i.quantity}x ${i.description}</td><td style="text-align:right">${formatCurrency(
+        `<tr><td>${esc(i.quantity)}x ${esc(i.description)}</td><td style="text-align:right">${money(
           i.subtotal
         )}</td></tr>`
     )
     .join('')
 
+  /**
+   * Veículo é OPCIONAL desde a v0.5.0. Quando não existe, o bloco INTEIRO
+   * sai do documento — a versão anterior interpolava os campos direto e
+   * imprimia "Veículo: undefined · undefined" na nota. vehicleLabel com
+   * fallback vazio também cobre a O.S. legada que tem placa gravada mas
+   * não tem vehicleId.
+   */
+  const veiculo = vehicleLabel(order, '')
+  const veiculoHtml = veiculo ? `<p class="muted">Veículo: ${esc(veiculo)}</p>` : ''
+
+  const emitente = [
+    esc(client.nomeFantasia || client.name),
+    client.cnpj ? `CNPJ ${esc(client.cnpj)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
-<title>NF de Teste ${number}</title>
+<title>NF de Teste ${esc(number)}</title>
 <style>
   body { font-family: -apple-system, sans-serif; padding: 32px; color: #111; }
   .watermark { color: #b45309; background: #fef3c7; border: 1px solid #f59e0b; padding: 12px 16px; border-radius: 8px; margin-bottom: 24px; font-weight: 600; }
@@ -32,13 +56,15 @@ function buildTestDocument(order: Order, client: Client, number: string): string
 </head>
 <body>
   <div class="watermark">⚠ DOCUMENTO DE TESTE — SEM VALOR FISCAL. Gerado pelo provedor mock enquanto a integração real (eNotas ou outro) não é configurada.</div>
-  <h1>Nota Fiscal de Teste ${number}</h1>
-  <p class="muted">Emitente: ${client.name}${client.cnpj ? ` · CNPJ ${client.cnpj}` : ''}</p>
-  <p class="muted">Cliente: ${order.customerName} · Veículo: ${order.vehiclePlate} · ${order.vehicleModel}</p>
-  <p class="muted">Emitida em: ${new Date().toLocaleString('pt-BR')}</p>
+  <h1>Nota Fiscal de Teste ${esc(number)}</h1>
+  <p class="muted">Emitente: ${emitente}</p>
+  <p class="muted">O.S. ${esc(orderLabel(order))}</p>
+  <p class="muted">Cliente: ${esc(order.customerName)}</p>
+  ${veiculoHtml}
+  <p class="muted">Emitida em: ${esc(new Date().toLocaleString('pt-BR'))}</p>
   <table>
     ${itemsHtml}
-    <tr><td class="total">Total</td><td class="total" style="text-align:right">${formatCurrency(order.totalValue)}</td></tr>
+    <tr><td class="total">Total</td><td class="total" style="text-align:right">${money(order.totalValue)}</td></tr>
   </table>
 </body>
 </html>`
@@ -50,7 +76,7 @@ export const mockInvoiceProvider: InvoiceProvider = {
     const number = `TESTE-${Date.now()}`
     return {
       provider: 'mock',
-      kind: order.items.some((i) => i.type === 'part') ? 'nfe' : 'nfse',
+      kind: (order.items ?? []).some((i) => i.type === 'part') ? 'nfe' : 'nfse',
       number,
       totalValue: order.totalValue,
       documentContent: buildTestDocument(order, client, number),

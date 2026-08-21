@@ -13,3 +13,32 @@ body {
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
 }
+
+/*
+ * Impressão da O.S. — ver app/(app)/orders/[id]/imprimir/page.tsx.
+ * Esconde a casca do sistema (menu lateral, topo com busca, botão
+ * flutuante "Sugerir melhoria") e qualquer controle marcado com
+ * `no-print` (voltar, botão Imprimir da própria folha), deixando só o
+ * documento — uma folha A4.
+ */
+@media print {
+  aside,
+  header,
+  .fixed,
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  body {
+    background: #fff;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 15mm;
+}

@@ -9,15 +9,32 @@ import DashboardShell from '@/components/layout/DashboardShell'
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
-  const { clientId, role, loading: clientLoading } = useClientId()
+  const { clientId, role, loading: clientLoading, status } = useClientId()
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login')
+      return
     }
-  }, [authLoading, user, router])
+    if (clientLoading) return
+    // Sem users/{uid} e sem platformAdmins/{uid}: nenhuma oficina cadastrou
+    // essa pessoa ainda. Antes disso ficava preso numa tela "Carregando..."
+    // eterna, sem saída — agora tem rota própria, com botão Sair.
+    if (status === 'sem-oficina') {
+      router.push('/sem-oficina')
+      return
+    }
+    // Admin do sistema sem oficina própria vinculada: a área dele é /admin,
+    // não uma tela de oficina que não existe.
+    if (status === 'admin' && !clientId) {
+      router.push('/admin')
+    }
+  }, [authLoading, user, clientLoading, status, clientId, router])
 
-  if (authLoading || clientLoading || !user || !clientId) {
+  const stillResolving =
+    authLoading || !user || clientLoading || status === 'sem-oficina' || (status === 'admin' && !clientId)
+
+  if (stillResolving) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <p className="text-sm text-gray-500">Carregando...</p>
