@@ -760,9 +760,18 @@ que é trabalho futuro, não coberto aqui.
     (usado pra eu testar via browser automation antes de pedir
     homologação — não deixar rodando depois, pra não conflitar com a
     porta 3000 quando ele for usar o `.command`).
-  **Ainda não publicado no Hostinger** — existe um workflow do GitHub
-  Actions (`.github/workflows/deploy.yml`) preparado mas incompleto (sem
-  secrets configurados, sem script de deploy real).
+  **Deploy real em preparação (2026-09-07):** confirmado que o plano do
+  Alcides na Hostinger é uma **VPS** (não hospedagem compartilhada) — dá
+  pra rodar o Next.js como está, sem reescrever as telas com ID pra um
+  formato estático. `.github/workflows/deploy.yml` já tem lógica real
+  (SSH via `appleboy/ssh-action` → `git pull` + `npm run build` na
+  própria VPS + restart do PM2), mas **ainda não foi executado de ponta
+  a ponta** — falta o setup único da VPS (Node, PM2, clone do repo,
+  copiar o `.env.local` real) e os 3 secrets no GitHub
+  (`HOSTINGER_HOST`/`HOSTINGER_USER`/`HOSTINGER_PASS`). Passo a passo
+  completo em [`docs/DEPLOY-HOSTINGER-VPS.md`](docs/DEPLOY-HOSTINGER-VPS.md).
+  Até esse setup ser feito, o workflow falha sozinho no passo de SSH
+  (autenticação), sem efeito nenhum — seguro deixar mergeado esperando.
 - **Backend:** Firebase Auth + Firestore já estão em produção real (projeto
   `sistema-os-ef1ef`, região São Paulo). Cloud Functions existe só como
   placeholder, nada em uso.

@@ -1,5 +1,16 @@
 name: Deploy to Hostinger
 
+# Deploy real via SSH numa VPS Hostinger — ver docs/DEPLOY-HOSTINGER-VPS.md
+# para o setup único da VPS (Node, PM2, clone do repo, .env.local) e a
+# lista dos 3 secrets que este workflow espera. Sem esse setup feito
+# manualmente por quem tem acesso à VPS, este job falha no passo SSH
+# (autenticação), sem efeito nenhum — é seguro deixar mergeado esperando.
+#
+# O build acontece DENTRO da VPS (não aqui no runner do GitHub) de
+# propósito: assim o `.env.local` com as chaves reais do Firebase mora só
+# na VPS, copiado lá uma única vez por quem tem acesso a ela — nunca
+# precisa virar secret do GitHub.
+
 on:
   push:
     branches: [ main ]
@@ -10,24 +21,17 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Node
-        uses: actions/setup-node@v3
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: cd frontend-web && npm ci
-
-      - name: Build
-        run: cd frontend-web && npm run build
-
-      - name: Deploy to Hostinger
-        env:
-          HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
-          HOSTINGER_USER: ${{ secrets.HOSTINGER_USER }}
-          HOSTINGER_PASS: ${{ secrets.HOSTINGER_PASS }}
-        run: |
-          echo "Deploy workflow ready. Configure secrets in GitHub Settings."
-          # Script de deploy será adicionado após configurar acesso Hostinger
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USER }}
+          password: ${{ secrets.HOSTINGER_PASS }}
+          script: |
+            set -e
+            cd ~/sistema-os
+            git pull origin main
+            cd frontend-web
+            npm ci
+            npm run build
+            pm2 restart mecos-web || pm2 start npm --name mecos-web -- start
