@@ -8,11 +8,14 @@ import { watchOrder, watchCustomers, getClient } from '@/lib/firebase/firestore'
 import { Order, Customer, Client } from '@/lib/types'
 import { money, dateBR, vehicleLabel, orderLabel } from '@/lib/orders/format'
 
-type Modo = 'orcamento' | 'os'
+type Modo = 'orcamento' | 'os' | 'garantia'
+
+const MODOS_VALIDOS: Modo[] = ['orcamento', 'os', 'garantia']
 
 /**
- * Folha A4 pra impressão — orçamento (assinatura do cliente) ou O.S. de
- * bancada (queixa + espaço pro mecânico anotar). A casca do sistema
+ * Folha A4 pra impressão — orçamento (assinatura do cliente), O.S. de
+ * bancada (queixa + espaço pro mecânico anotar) ou Termo de Garantia
+ * (v0.6.0, entregue junto com a O.S. finalizada). A casca do sistema
  * (menu, topo, botão de melhorias) some no `@media print` de
  * `app/globals.css`; os controles de tela (voltar, botão Imprimir) somem
  * junto por levarem a classe `no-print`.
@@ -20,7 +23,8 @@ type Modo = 'orcamento' | 'os'
 function ImprimirContent() {
   const params = useParams<{ id: string }>()
   const searchParams = useSearchParams()
-  const modo: Modo = searchParams.get('doc') === 'os' ? 'os' : 'orcamento'
+  const docParam = searchParams.get('doc') as Modo | null
+  const modo: Modo = docParam && MODOS_VALIDOS.includes(docParam) ? docParam : 'orcamento'
   const { clientId } = useClientId()
 
   const [order, setOrder] = useState<Order | null>(null)
@@ -86,7 +90,11 @@ function ImprimirContent() {
           </div>
           <div className="shrink-0 text-right">
             <p className="text-sm font-semibold text-gray-900">
-              {modo === 'orcamento' ? 'Orçamento' : 'Ordem de Serviço'}
+              {modo === 'orcamento'
+                ? 'Orçamento'
+                : modo === 'garantia'
+                  ? 'Termo de Garantia'
+                  : 'Ordem de Serviço'}
             </p>
             <p className="text-sm text-gray-700">{orderLabel(order)}</p>
             <p className="text-xs text-gray-500">{dateBR(order.createdAt)}</p>
@@ -155,17 +163,53 @@ function ImprimirContent() {
           </tfoot>
         </table>
 
-        {modo === 'orcamento' ? (
+        {modo === 'orcamento' && (
           <div className="mt-16 grid grid-cols-2 gap-8 text-center text-sm">
             <div className="border-t border-gray-400 pt-2 text-gray-700">Assinatura do cliente</div>
             <div className="border-t border-gray-400 pt-2 text-gray-700">Data: ____ / ____ / ______</div>
           </div>
-        ) : (
+        )}
+
+        {modo === 'os' && (
           <div className="mt-10">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
               Anotações do mecânico
             </p>
             <div className="h-32 rounded border border-gray-300" />
+          </div>
+        )}
+
+        {modo === 'garantia' && (
+          <div className="mt-8 space-y-4 text-sm leading-relaxed text-gray-800">
+            <p>
+              A {client.nomeFantasia || client.name || 'oficina'} garante os serviços executados e
+              descritos nesta Ordem de Serviço pelo prazo de{' '}
+              <strong>{client.warrantyDaysService ?? 90} dias corridos</strong>, contados a partir
+              da data de entrega do veículo
+              {order.deliveredAt ? ` (${dateBR(order.deliveredAt)})` : ''}, nos termos do artigo 26
+              do Código de Defesa do Consumidor (Lei nº 8.078/1990) para vícios aparentes ou de
+              fácil constatação, e dos artigos 18 e 20 da mesma lei para vícios ocultos, cujo prazo
+              se conta a partir do momento em que o defeito se evidenciar.
+            </p>
+            <p>
+              Peças e componentes substituídos seguem a garantia dada pelo respectivo fabricante ou
+              fornecedor, quando aplicável, independente do prazo acima, que se refere à mão de
+              obra e à execução do serviço.
+            </p>
+            <p>
+              Esta garantia não cobre defeitos decorrentes de mau uso, acidente, alteração ou
+              intervenção de terceiros não autorizada, desgaste natural de peças não relacionadas
+              ao serviço executado, ou uso do veículo fora das condições normais de utilização.
+            </p>
+            {client.warrantyNotes && <p>{client.warrantyNotes}</p>}
+            <div className="mt-12 grid grid-cols-2 gap-8 text-center text-sm">
+              <div className="border-t border-gray-400 pt-2 text-gray-700">
+                {client.nomeFantasia || client.name || 'Oficina'}
+              </div>
+              <div className="border-t border-gray-400 pt-2 text-gray-700">
+                Ciente — {order.customerName}
+              </div>
+            </div>
           </div>
         )}
       </div>

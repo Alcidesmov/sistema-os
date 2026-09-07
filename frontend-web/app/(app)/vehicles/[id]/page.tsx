@@ -8,6 +8,7 @@ import { watchVehicles, watchCustomers, watchOrders, updateVehicle } from '@/lib
 import { Vehicle, Customer, Order, VehicleType, VEHICLE_TYPE_LABEL } from '@/lib/types'
 import { dateBR, money, orderLabel } from '@/lib/orders/format'
 import { isCancelled, statusColorOf, statusLabelOf } from '@/lib/orders/status'
+import { kmTargetOf, lastKmOrderOf } from '@/lib/orders/km'
 
 const TIPOS = Object.keys(VEHICLE_TYPE_LABEL) as VehicleType[]
 
@@ -63,6 +64,13 @@ export default function VehicleDetailPage() {
     [osValidas]
   )
   const osMaisRecente = minhasOs[0] ?? null
+
+  /** Última O.S. deste veículo com km registrado — sustenta o aviso de retorno. */
+  const osComKm = useMemo(
+    () => (vehicle ? lastKmOrderOf(minhasOs, vehicle.id) : null),
+    [minhasOs, vehicle]
+  )
+  const proximaRevisaoKm = useMemo(() => (osComKm ? kmTargetOf(osComKm) : null), [osComKm])
 
   useEffect(() => {
     if (!vehicle || editing) return
@@ -183,6 +191,24 @@ export default function VehicleDetailPage() {
           <p className="mt-1 text-xs text-blue-600">ver o histórico completo →</p>
         </a>
       </div>
+
+      {/* --- Aviso de retorno por km (v0.6.0) --- */}
+      {osComKm && proximaRevisaoKm != null && (
+        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <p className="font-medium">
+            Revisão recomendada aos {proximaRevisaoKm.toLocaleString('pt-BR')} km
+          </p>
+          <p className="mt-1 text-xs text-blue-700">
+            Km de {osComKm.entryKm?.toLocaleString('pt-BR')} registrado na O.S.{' '}
+            <Link href={`/orders/${osComKm.id}`} className="underline">
+              {orderLabel(osComKm)}
+            </Link>{' '}
+            em {dateBR(osComKm.createdAt)}. Sem sensor de km no carro, isso só é conferido quando
+            ele volta e o km é digitado de novo — vira aviso automático na próxima O.S. deste
+            veículo.
+          </p>
+        </div>
+      )}
 
       {/* --- Dados do veículo, edição inline --- */}
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">

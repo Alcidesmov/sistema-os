@@ -15,6 +15,7 @@ dist/
 out/
 .expo
 *.tsbuildinfo
+firebase/lib/
 
 # IDE
 .vscode/

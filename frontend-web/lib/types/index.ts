@@ -154,6 +154,21 @@ export interface Order {
   invoiceRequested?: boolean
   invoiceId?: string
 
+  /**
+   * Quilometragem registrada na ENTRADA deste atendimento (v0.6.0). Serve
+   * de base pro "aviso de retorno": junto com `reminderKmInterval`, dá o
+   * km-alvo da próxima revisão (`entryKm + reminderKmInterval`). Nunca
+   * atualizado sozinho pelo sistema — só quando alguém digita, porque não
+   * há telemetria do veículo (só sabemos o km quando ele volta à oficina).
+   */
+  entryKm?: number
+  /**
+   * A cada quantos km avisar o retorno, contados a partir de `entryKm`.
+   * Sugestão de UI é 3000 (troca de óleo), mas é livre por O.S. — omitido
+   * se `entryKm` também não foi informado (ver lib/orders/km.ts).
+   */
+  reminderKmInterval?: number
+
   createdAt: number
   updatedAt: number
 }
@@ -180,6 +195,18 @@ export interface Client {
    */
   gestorNome?: string
   gestorEmail?: string
+
+  /**
+   * Termo de Garantia (v0.6.0) — configurável pelo gestor na tela
+   * "Oficina", usado só na impressão (`doc=garantia`). Prazo em dias
+   * corridos, contado a partir da entrega. Sem valor salvo, a tela de
+   * impressão usa 90 (Art. 26, CDC, pra vícios em serviços/bens duráveis)
+   * como sugestão — não é assessoria jurídica, é só um texto de partida
+   * editável.
+   */
+  warrantyDaysService?: number
+  /** Observação livre anexada ao termo (exceções, condições específicas). */
+  warrantyNotes?: string
 }
 
 export type UserRole = 'gestor' | 'supervisor' | 'mecanico' | 'recepcionista'
