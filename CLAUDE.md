@@ -91,14 +91,16 @@
 > (Ordens de Serviço → #2 → "Apagar rascunho", já que está em
 > diagnóstico/sem itens/nunca aprovada) ou pedir pra eu limpar.
 
-**Versão atual: v0.6.0** — Duas melhorias pedidas pelo Alcides: Termo de
-Garantia na impressão da OS, e quilometragem de entrada com aviso de
-retorno (no sistema + botão de e-mail de teste). Sessão rodou num
-ambiente remoto/cloud (Claude Code on the web), não no Mac dele — por
-isso o fluxo de homologação é o de PR (ver seção 6.8): commitado na
-branch `claude/oi-oe95jt`, com PR aberto como rascunho, **ainda
-aguardando ele revisar/testar antes de ir pra `main`**. Detalhe completo
-na entrada v0.6.0 do Histórico de Versões.
+**Versão atual: v0.6.0** — Três melhorias pedidas pelo Alcides: Termo de
+Garantia na impressão da OS, quilometragem de entrada com aviso de
+retorno por e-mail (direto pro e-mail do cliente, sem modo de teste —
+ver seção 6.12), e o **Painel de Retorno** (`/retorno`, grade de
+cartões por veículo pra ver de relance quem já deve estar na hora de
+voltar). Sessão rodou num ambiente remoto/cloud (Claude Code on the
+web), não no Mac dele — por isso o fluxo de homologação é o de PR (ver
+seção 6.8): commitado na branch `claude/oi-oe95jt`, com PR aberto como
+rascunho, **ainda aguardando ele revisar/testar antes de ir pra
+`main`**. Detalhe completo na entrada v0.6.0 do Histórico de Versões.
 
 **Versão anterior: v0.5.0** — Reconcepção completa pedida pelo Alcides
 depois de reprovar a v0.4.2 ("carente de navegação"). Resolve as 3
@@ -401,13 +403,26 @@ atendimentos — então o "aviso no sistema" funciona assim: quando o MESMO
 veículo volta numa OS nova, o sistema compara o km novo com o km-alvo
 calculado na visita anterior e mostra um banner (verde/âmbar/vermelho
 conforme a distância) dentro da própria OS e também na ficha do veículo
-(`vehicles/[id]`). Não existe hoje uma lista proativa "veículos vencendo"
-na Esteira/Dashboard — isso exigiria estimar km por tempo decorrido
-(sem dado real de uso do carro), o que não foi implementado por ora.
-Cada OS com km registrado ganha um botão **"📧 Enviar aviso de
-retorno"**, que chama a Cloud Function `enviarAvisoRetorno` — ver seção
-6.12 para o estado atual (modo de teste, e-mail real ainda não vai pro
-cliente).
+(`vehicles/[id]`). Cada OS com km registrado ganha um botão **"📧 Enviar
+aviso de retorno"**, que chama a Cloud Function `enviarAvisoRetorno` —
+sempre envia pro e-mail cadastrado do cliente (`Customer.email`), sem
+modo de teste (ver seção 6.12); pra validar o conteúdo, cadastre o
+próprio e-mail como e-mail de um cliente de teste.
+
+**Painel de Retorno (`/retorno`, v0.6.0):** a visão proativa que
+faltava — antes o aviso só aparecia quando o veículo VOLTAVA numa OS
+nova (seção acima). A tela nova (`app/(app)/retorno/page.tsx`, item
+"Painel de Retorno" no menu Operação) lista, num grid de cartões (um
+por veículo), todo veículo com km registrado em alguma OS, ordenado do
+mais provável de já estar atrasado pro menos. `returnPanelItemsOf`
+(`lib/orders/km.ts`) só atribui um nível de urgência
+(atrasado/próximo/programado) quando o veículo tem 2+ visitas com km —
+aí dá pra calcular a média real de km/dia percorrida entre elas e
+estimar o km de hoje. Com só 1 visita registrada, o cartão mostra a
+última visita e o km-alvo sem alegar atraso — deliberadamente nunca
+inventa uma média de km/dia genérica só pra forçar uma estimativa.
+Busca por cliente/veículo no topo da tela, seguindo o padrão obrigatório
+da seção 6.11.
 
 ### 5.7 Notas Fiscais (`app/(app)/invoices/page.tsx`)
 Fila de OS `finalizado` + `invoiceRequested: true` que ainda não têm
@@ -691,11 +706,15 @@ caminho mais rápido pra validar o TEXTO e o GATILHO do aviso agora; a
 troca pra Gmail API OAuth por oficina fica documentada aqui como o passo
 seguinte, não como decisão tomada.
 
-**Modo de teste embutido:** enquanto a config `aviso.test_override`
-estiver setada, TODO aviso (de qualquer OS, de qualquer cliente) vai pro
-e-mail de teste em vez do e-mail real do cliente cadastrado — assim dá
-pra validar o conteúdo sem risco de mandar e-mail errado pra um cliente
-de verdade. Remover essa config é o que "liga" o envio pra clientes reais.
+**Sem modo de teste — envia direto pro e-mail do cliente:** a function
+sempre lê `customer.email` da OS e manda pra lá (erro
+`failed-precondition` se o cliente não tiver e-mail cadastrado — cadastro
+em Clientes é opcional hoje). Decisão do Alcides (2026-09-07): não vale a
+pena manter um config de "override de teste" que depois alguém precisa
+lembrar de desligar — mais simples validar o conteúdo cadastrando o
+próprio e-mail (`35alcides@gmail.com`) como e-mail de um cliente de
+teste na conta RRadiadores, pelo MESMO caminho que vai valer pro cliente
+real depois.
 
 **Passo a passo pra ativar (o Alcides precisa fazer, local, com
 `firebase-tools` instalado):**
@@ -709,19 +728,15 @@ de verdade. Remover essa config é o que "liga" o envio pra clientes reais.
    ```
    firebase functions:config:set \
      gmail.user="35alcides@gmail.com" \
-     gmail.pass="SENHA_DE_APP_16_CARACTERES" \
-     aviso.test_override="35alcides@gmail.com"
+     gmail.pass="SENHA_DE_APP_16_CARACTERES"
    ```
 4. `npm run build && firebase deploy --only functions` (primeiro deploy
    de uma função real deste projeto — `helloWorld` nunca foi usado).
-5. Testar: abrir uma OS com veículo e km registrados (`KmDaOS`) e clicar
-   "📧 Enviar aviso de retorno". Deve chegar em `35alcides@gmail.com`
-   independente de qual cliente for, por causa do `test_override`.
-6. Quando validar o conteúdo e quiser mandar pro cliente real de uma OS
-   específica: `firebase functions:config:unset aviso.test_override` e
-   fazer deploy de novo — a partir daí o e-mail vai para
-   `customer.email` de cada cliente (cadastro em Clientes precisa ter
-   e-mail preenchido, é opcional hoje).
+5. Testar: numa O.S. cujo cliente tenha `35alcides@gmail.com` cadastrado
+   como e-mail, registrar o km em `KmDaOS` e clicar "📧 Enviar aviso de
+   retorno" — deve chegar nesse e-mail. Pra um cliente real, o mesmo
+   botão já funciona sem nenhum passo extra, desde que ele tenha e-mail
+   cadastrado em Clientes.
 
 **Limitação conhecida, por design:** não existe monitoramento
 automático/agendado — o aviso só é enviado quando alguém clica o botão
@@ -777,8 +792,11 @@ que é trabalho futuro, não coberto aqui.
 > Atualizar esta seção a cada mudança relevante — resumo curto, não
 > changelog verboso linha-a-linha (isso já existe no `git log`).
 
-- **v0.6.0** (2026-09-07) — Duas melhorias pedidas pelo Alcides, feitas
-  numa sessão remota (Claude Code on the web, branch `claude/oi-oe95jt`):
+- **v0.6.0** (2026-09-07) — Três melhorias pedidas pelo Alcides, feitas
+  numa sessão remota (Claude Code on the web, branch `claude/oi-oe95jt`)
+  em duas rodadas — as duas primeiras vieram do pedido original, a
+  terceira (Painel de Retorno) foi pedida durante a mesma revisão, ao
+  ver o aviso de km funcionando:
 
   **(1) Termo de Garantia na impressão.** Terceira opção no menu
   🖨️ Imprimir da OS (`orders/[id]/imprimir?doc=garantia`, ao lado de
@@ -804,23 +822,41 @@ que é trabalho futuro, não coberto aqui.
   Além do aviso "no sistema", cada OS com km registrado ganha um botão
   **"📧 Enviar aviso de retorno"**, que chama a Cloud Function nova
   `enviarAvisoRetorno` (`firebase/src/index.ts`, Nodemailer + Gmail SMTP)
-  — **ainda em modo de teste**, todo envio cai no e-mail do Alcides
-  (`35alcides@gmail.com`) em vez do cliente real, até ele decidir "ligar"
-  pra valer. Ver seção 6.12 pro runbook completo (senha de app, deploy
-  manual — nada disso foi implantado nem testado em produção ainda,
-  porque este ambiente não tem `firebase-tools` autenticado). O caminho
+  — sempre envia pro e-mail cadastrado do cliente, **sem modo de teste**:
+  o Alcides pediu explicitamente pra não ter esse mecanismo ("não é
+  preciso de módulo de teste, faça operacionalmente funcionando, apenas
+  substituiremos pelo email do cliente") — pra validar antes do deploy,
+  a ideia é cadastrar o próprio e-mail como e-mail de um cliente de
+  teste, em vez de a function ter um caminho especial só pra isso. Ver
+  seção 6.12 pro runbook completo (senha de app, deploy manual — nada
+  disso foi implantado nem testado em produção ainda, porque este
+  ambiente não tem `firebase-tools` autenticado). O caminho
   Nodemailer+senha de app é deliberadamente o mais simples possível pra
   validar o conteúdo do aviso agora; a Gmail API com OAuth por
   oficina-cliente (o que o Alcides descreveu como próximo passo, "API do
   cliente que também é Google") fica documentada como trabalho futuro,
   não implementada nesta sessão.
 
+  **(3) Painel de Retorno.** Tela nova (`/retorno`, item próprio no menu
+  Operação) que faltava: uma visão proativa de "quem já deve estar na
+  hora de voltar", em vez de só descobrir quando o veículo volta sozinho.
+  Pedido do Alcides: "um painel de retorno... como se fosse uma colmeia,
+  vários quadrados com nome do cliente e veículo". `returnPanelItemsOf`
+  (novo em `lib/orders/km.ts`) agrupa as OS por veículo e, quando há 2+
+  visitas com km registrado, estima o km de hoje pela média real de
+  km/dia entre as duas últimas — só então classifica como atrasado/
+  próximo/programado. Com 1 visita só, o cartão mostra a última visita e
+  o km-alvo sem alegar atraso: decisão deliberada de não inventar uma
+  média de km/dia genérica sem dado real que a sustente. Grid responsivo
+  de cartões coloridos por urgência, com busca por cliente/veículo no
+  topo (padrão 6.11), cada cartão levando pra ficha do veículo.
+
   **Verificado nesta sessão:** `npx tsc --noEmit` limpo em
-  `frontend-web/` e em `firebase/` (`npm run build` também limpo). **Não
-  verificado:** o app não foi executado no navegador (sessão remota sem
-  browser automation disponível desta vez) nem a Cloud Function foi
-  implantada/testada de ponta a ponta — cabe ao Alcides confirmar visual
-  e funcionalmente ao revisar o PR.
+  `frontend-web/` e em `firebase/` (`npm run build` também limpo, nas
+  duas rodadas). **Não verificado:** o app não foi executado no
+  navegador (sessão remota sem browser automation disponível desta vez)
+  nem a Cloud Function foi implantada/testada de ponta a ponta — cabe ao
+  Alcides confirmar visual e funcionalmente ao revisar o PR.
 
   **Pendente:** (a) revisão/homologação do PR pelo Alcides; (b) deploy
   manual da Cloud Function + configuração da senha de app (seção 6.12);

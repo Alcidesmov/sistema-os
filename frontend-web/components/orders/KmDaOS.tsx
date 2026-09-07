@@ -106,7 +106,7 @@ export default function KmDaOS({ clientId, order, orders, customer, by }: KmDaOS
     setAvisoEnviado(null)
     try {
       const r = await enviarAvisoRetorno(clientId, order.id)
-      setAvisoEnviado(r.testMode ? `Enviado em modo de teste para ${r.sentTo}.` : `Enviado para ${r.sentTo}.`)
+      setAvisoEnviado(`Enviado para ${r.sentTo}.`)
     } catch (e) {
       console.error(e)
       setErroEnvio(
@@ -153,7 +153,7 @@ export default function KmDaOS({ clientId, order, orders, customer, by }: KmDaOS
             <button
               type="button"
               onClick={enviarAviso}
-              disabled={enviando || metaAtual == null}
+              disabled={enviando || metaAtual == null || !customer?.email}
               className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
             >
               {enviando ? 'Enviando...' : '📧 Enviar aviso de retorno'}
@@ -226,9 +226,8 @@ export default function KmDaOS({ clientId, order, orders, customer, by }: KmDaOS
 
       {order.entryKm != null && !customer?.email && (
         <p className="mt-2 text-xs text-amber-700">
-          Este cliente não tem e-mail cadastrado — o envio ainda funciona em modo de teste
-          (recebe você, ver CLAUDE.md), mas não vai alcançar o cliente real até cadastrar o e-mail
-          dele.
+          Este cliente não tem e-mail cadastrado — cadastre um e-mail em Clientes para poder
+          enviar o aviso de retorno.
         </p>
       )}
       {avisoEnviado && <p className="mt-2 text-xs font-medium text-green-700">✓ {avisoEnviado}</p>}

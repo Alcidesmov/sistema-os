@@ -40,6 +40,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/esteira', label: 'Esteira' },
       { href: '/orders', label: 'Ordens de Serviço' },
+      { href: '/retorno', label: 'Painel de Retorno' },
       { href: '/invoices', label: 'Notas Fiscais' },
     ],
   },

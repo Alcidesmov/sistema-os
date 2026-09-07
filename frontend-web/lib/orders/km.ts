@@ -1,4 +1,5 @@
 import { Order } from '@/lib/types'
+import { daysSince } from '@/lib/orders/format'
 
 /** Intervalo sugerido na UI quando o campo ainda está vazio (troca de óleo). */
 export const DEFAULT_REMINDER_KM_INTERVAL = 3000
@@ -82,4 +83,92 @@ export function kmAlertOf(currentOrder: Pick<Order, 'entryKm'>, previous: Order 
     fromOrder: previous,
     message: `Revisão recomendada aos ${targetKm.toLocaleString('pt-BR')} km (registrado na O.S. anterior).`,
   }
+}
+
+export type ReturnPanelLevel = KmAlertLevel | 'sem_estimativa'
+
+export interface ReturnPanelItem {
+  vehicleId: string
+  customerId: string
+  customerName: string
+  vehiclePlate?: string
+  vehicleModel?: string
+  /** A O.S. mais recente deste veículo que teve km registrado. */
+  lastOrder: Order
+  targetKm: number
+  daysSinceLastVisit: number
+  /**
+   * Km estimado hoje, só quando há 2+ visitas com km pra calcular uma
+   * média de uso real do carro. Nunca inventa uma média genérica — sem
+   * segundo ponto de dado, o painel mostra a última visita e o alvo, sem
+   * alegar status de atraso (nível 'sem_estimativa').
+   */
+  estimatedCurrentKm: number | null
+  level: ReturnPanelLevel
+}
+
+/**
+ * Um item por veículo (o painel é "por carro", não "por O.S.") — pra cada
+ * um, pega a visita mais recente com km registrado e, se houver uma
+ * visita anterior também com km, estima o km de hoje pela média de uso
+ * real entre as duas (km rodado / dias decorridos). Essa é a única forma
+ * honesta de "aviso proativo" sem telemetria do carro: nunca assume uma
+ * média de km/dia genérica quando só existe um ponto de dado.
+ */
+export function returnPanelItemsOf(orders: Order[], now: number = Date.now()): ReturnPanelItem[] {
+  const porVeiculo = new Map<string, Order[]>()
+  for (const o of orders) {
+    if (!o.vehicleId || o.entryKm == null) continue
+    const lista = porVeiculo.get(o.vehicleId)
+    if (lista) lista.push(o)
+    else porVeiculo.set(o.vehicleId, [o])
+  }
+
+  const items: ReturnPanelItem[] = []
+  for (const [vehicleId, lista] of porVeiculo) {
+    const ordenadas = [...lista].sort((a, b) => a.createdAt - b.createdAt)
+    const ultima = ordenadas[ordenadas.length - 1]
+    const anterior = ordenadas[ordenadas.length - 2] ?? null
+    const targetKm = kmTargetOf(ultima)
+    if (targetKm == null) continue
+
+    const daysSinceLastVisit = daysSince(ultima.createdAt, now)
+
+    let estimatedCurrentKm: number | null = null
+    let level: ReturnPanelLevel = 'sem_estimativa'
+
+    if (anterior?.entryKm != null && ultima.entryKm != null) {
+      const diasEntreVisitas = daysSince(anterior.createdAt, ultima.createdAt)
+      const kmRodado = ultima.entryKm - anterior.entryKm
+      if (diasEntreVisitas > 0 && kmRodado > 0) {
+        const mediaKmPorDia = kmRodado / diasEntreVisitas
+        estimatedCurrentKm = Math.round(ultima.entryKm + mediaKmPorDia * daysSinceLastVisit)
+        const faltam = targetKm - estimatedCurrentKm
+        level = faltam <= 0 ? 'atrasado' : faltam <= 500 ? 'proximo' : 'programado'
+      }
+    }
+
+    items.push({
+      vehicleId,
+      customerId: ultima.customerId,
+      customerName: ultima.customerName,
+      vehiclePlate: ultima.vehiclePlate,
+      vehicleModel: ultima.vehicleModel,
+      lastOrder: ultima,
+      targetKm,
+      daysSinceLastVisit,
+      estimatedCurrentKm,
+      level,
+    })
+  }
+
+  return items
+}
+
+/** Mais urgente primeiro — usada pra ordenar o Painel de Retorno. */
+export const RETURN_LEVEL_PRIORITY: Record<ReturnPanelLevel, number> = {
+  atrasado: 0,
+  proximo: 1,
+  programado: 2,
+  sem_estimativa: 3,
 }

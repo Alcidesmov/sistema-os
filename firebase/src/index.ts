@@ -19,24 +19,22 @@ export const helloWorld = functions.https.onRequest((req, res) => {
 
 /**
  * Aviso de retorno por e-mail (v0.6.0) — PRIMEIRA VERSÃO, envia via Gmail
- * SMTP (Nodemailer) com uma conta/senha de app do Google. É
- * DELIBERADAMENTE o caminho mais simples para o teste inicial pedido pelo
- * Alcides ("vamos fazer o teste com 35alcides") — o passo seguinte,
- * quando cada oficina-cliente tiver a própria conta Google conectada, é
- * trocar isso pela Gmail API com OAuth por tenant (mais setup, mais
- * correto pra multi-tenant real). Ver CLAUDE.md seção sobre este recurso
- * para o runbook de configuração e deploy — NADA disso foi testado em
- * produção ainda porque este ambiente de desenvolvimento não tem
- * `firebase-tools` autenticado pra fazer o deploy.
+ * SMTP (Nodemailer) com uma conta/senha de app do Google. Sempre envia
+ * pro e-mail cadastrado do cliente (`customer.email`) — sem modo de
+ * teste: pra validar o conteúdo, use o próprio e-mail como e-mail do
+ * cliente de teste. É DELIBERADAMENTE o caminho mais simples pro pedido
+ * inicial do Alcides — o passo seguinte, quando cada oficina-cliente
+ * tiver a própria conta Google conectada, é trocar isso pela Gmail API
+ * com OAuth por tenant (mais setup, mais correto pra multi-tenant real).
+ * Ver CLAUDE.md seção sobre este recurso para o runbook de configuração
+ * e deploy — NADA disso foi testado em produção ainda porque este
+ * ambiente de desenvolvimento não tem `firebase-tools` autenticado pra
+ * fazer o deploy.
  *
  * Config necessária (firebase functions:config:set):
  *   gmail.user   — conta Gmail que vai ENVIAR (com senha de app, não a
  *                  senha normal — precisa 2FA ativo na conta Google)
  *   gmail.pass   — a senha de app de 16 caracteres
- *   aviso.test_override — (opcional, usado enquanto testamos) um e-mail
- *                  fixo que recebe TODOS os avisos no lugar do cliente
- *                  real, ex: "35alcides@gmail.com". Remover essa chave
- *                  quando for hora de enviar pro cliente de verdade.
  */
 export const enviarAvisoRetorno = functions
   .region('southamerica-east1')
@@ -83,8 +81,7 @@ export const enviarAvisoRetorno = functions
       | undefined
     const oficinaNome = client?.nomeFantasia || client?.name || 'Sua oficina'
 
-    const testOverride = functions.config().aviso?.test_override as string | undefined
-    const destinatario = testOverride || customer?.email
+    const destinatario = customer?.email
     if (!destinatario) {
       throw new functions.https.HttpsError(
         'failed-precondition',
@@ -110,15 +107,9 @@ export const enviarAvisoRetorno = functions
     })
 
     const veiculo = [order.vehiclePlate, order.vehicleModel].filter(Boolean).join(' · ') || 'seu veículo'
-    const avisoParaClienteReal = testOverride
-      ? `<p style="color:#b45309;font-size:12px">[TESTE — este e-mail seria enviado para ${
-          customer?.email ?? 'o cliente (sem e-mail cadastrado)'
-        }]</p>`
-      : ''
 
     const html = `
       <div style="font-family:sans-serif;font-size:14px;color:#111">
-        ${avisoParaClienteReal}
         <p>Olá, ${order.customerName || customer?.name || ''}!</p>
         <p>
           Aqui é a <strong>${oficinaNome}</strong>. Registramos que ${veiculo} entrou na oficina
@@ -145,8 +136,8 @@ export const enviarAvisoRetorno = functions
       at: Date.now(),
       by: context.auth.token.email || context.auth.uid,
       action: 'aviso de retorno enviado por e-mail',
-      detail: testOverride ? `modo teste → ${testOverride}` : destinatario,
+      detail: destinatario,
     })
 
-    return { ok: true, sentTo: destinatario, testMode: Boolean(testOverride) }
+    return { ok: true, sentTo: destinatario }
   })
