@@ -97,10 +97,14 @@ retorno por e-mail (direto pro e-mail do cliente, sem modo de teste —
 ver seção 6.12), e o **Painel de Retorno** (`/retorno`, grade de
 cartões por veículo pra ver de relance quem já deve estar na hora de
 voltar). Sessão rodou num ambiente remoto/cloud (Claude Code on the
-web), não no Mac dele — por isso o fluxo de homologação é o de PR (ver
-seção 6.8): commitado na branch `claude/oi-oe95jt`, com PR aberto como
-rascunho, **ainda aguardando ele revisar/testar antes de ir pra
-`main`**. Detalhe completo na entrada v0.6.0 do Histórico de Versões.
+web), não no Mac dele — por isso o fluxo de homologação foi o de PR
+(ver seção 6.8): PR #1 revisado e **mesclado em `main`** por ele em
+2026-09-08 (commit `9f9a262`). Também inclui o início do deploy real
+na Hostinger (VPS confirmada, workflow com SSH+PM2 real — ver seção 7
+e `docs/DEPLOY-HOSTINGER-VPS.md`); a primeira tentativa automática de
+deploy já rodou e falhou de forma esperada (`missing server host`) por
+faltar o setup manual da VPS e os secrets no GitHub, ainda não feitos.
+Detalhe completo na entrada v0.6.0 do Histórico de Versões.
 
 **Versão anterior: v0.5.0** — Reconcepção completa pedida pelo Alcides
 depois de reprovar a v0.4.2 ("carente de navegação"). Resolve as 3
@@ -867,9 +871,20 @@ que é trabalho futuro, não coberto aqui.
   nem a Cloud Function foi implantada/testada de ponta a ponta — cabe ao
   Alcides confirmar visual e funcionalmente ao revisar o PR.
 
-  **Pendente:** (a) revisão/homologação do PR pelo Alcides; (b) deploy
+  **Atualização (2026-09-08):** homologado e mesclado em `main` pelo
+  Alcides (commit `9f9a262`) — a ressalva (a) abaixo está resolvida. A
+  primeira tentativa automática de deploy (disparada pelo próprio merge)
+  rodou e falhou rápido e sem dano, com `Error: missing server host` —
+  esperado, já que os 3 secrets do GitHub ainda não foram cadastrados.
+
+  **Pendente:** ~~(a) revisão/homologação do PR pelo Alcides~~; (b) setup
+  manual da VPS + os 3 secrets no GitHub pra o deploy automático
+  funcionar (seção 7, `docs/DEPLOY-HOSTINGER-VPS.md`) — inclui também
+  confirmar como o site que já está no ar hoje
+  (`mecos.srv1697060.hstgr.cloud`) foi originalmente configurado, já
+  que pode ser um mecanismo diferente do workflow novo; (c) deploy
   manual da Cloud Function + configuração da senha de app (seção 6.12);
-  (c) tudo que já estava pendente da v0.5.0 (regra do Firestore, dado de
+  (d) tudo que já estava pendente da v0.5.0 (regra do Firestore, dado de
   teste, tenant órfão — ver callouts no topo do arquivo), que esta sessão
   não tocou.
 
