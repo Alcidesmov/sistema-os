@@ -293,6 +293,38 @@ export async function updateOrderFields(
 }
 
 /**
+ * Registra o km de entrada e o intervalo de aviso de retorno (v0.6.0).
+ * `entryKm: null` apaga os dois campos (deleteField — Firestore rejeita
+ * undefined, CLAUDE.md 6.1) — usado quando alguém limpa o campo por
+ * engano. Editável a qualquer momento, igual ao veículo e aos itens.
+ */
+export async function setOrderKm(
+  clientId: string,
+  orderId: string,
+  data: { entryKm: number | null; reminderKmInterval?: number },
+  by = ''
+) {
+  const payload: Record<string, unknown> = { updatedAt: Date.now() }
+  if (data.entryKm == null) {
+    payload.entryKm = deleteField()
+    payload.reminderKmInterval = deleteField()
+  } else {
+    payload.entryKm = data.entryKm
+    payload.reminderKmInterval = data.reminderKmInterval ?? 3000
+  }
+  await updateDoc(orderRef(clientId, orderId), payload)
+  await logOrderEvent(
+    clientId,
+    orderId,
+    by,
+    data.entryKm == null ? 'quilometragem removida' : 'quilometragem registrada',
+    data.entryKm == null
+      ? undefined
+      : `${data.entryKm.toLocaleString('pt-BR')} km · aviso a cada ${(data.reminderKmInterval ?? 3000).toLocaleString('pt-BR')} km`
+  )
+}
+
+/**
  * Aprova o orçamento e já abre a execução, registrando a PROVA: quem
  * autorizou e por qual canal. "Eu não autorizei esse serviço" é discussão
  * semanal em oficina — antes disso o clique era anônimo.

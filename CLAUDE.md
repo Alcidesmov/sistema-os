@@ -91,18 +91,31 @@
 > (Ordens de Serviço → #2 → "Apagar rascunho", já que está em
 > diagnóstico/sem itens/nunca aprovada) ou pedir pra eu limpar.
 
-**Versão atual: v0.5.0** — Reconcepção completa pedida pelo Alcides
+**Versão atual: v0.6.0** — Três melhorias pedidas pelo Alcides: Termo de
+Garantia na impressão da OS, quilometragem de entrada com aviso de
+retorno por e-mail (direto pro e-mail do cliente, sem modo de teste —
+ver seção 6.12), e o **Painel de Retorno** (`/retorno`, grade de
+cartões por veículo pra ver de relance quem já deve estar na hora de
+voltar). Sessão rodou num ambiente remoto/cloud (Claude Code on the
+web), não no Mac dele — por isso o fluxo de homologação é o de PR (ver
+seção 6.8): commitado na branch `claude/oi-oe95jt`, com PR aberto como
+rascunho, **ainda aguardando ele revisar/testar antes de ir pra
+`main`**. Detalhe completo na entrada v0.6.0 do Histórico de Versões.
+
+**Versão anterior: v0.5.0** — Reconcepção completa pedida pelo Alcides
 depois de reprovar a v0.4.2 ("carente de navegação"). Resolve as 3
 reclamações dele (O.S. nasce só com cliente; administrador do sistema
 exclusivo pra cadastrar oficinas; esteira + relatórios por OS/cliente/
 veículo) e reformula a navegação (menu agrupado por Operação/Cadastros/
-Gestão, busca global, breadcrumb). **Ainda não
-homologada pelo Alcides nem publicada em produção** — ver callouts
-acima (regra do Firestore pendente) e seção 6.8 (commit só depois de
-homologação). Detalhe completo da mudança na entrada v0.5.0 do
-Histórico de Versões, no final deste arquivo.
+Gestão, busca global, breadcrumb). **Homologada e commitada** (commit
+`42855f7`, 2026-08-21, `main` e `claude/oi-oe95jt` já com o push feito)
+— mas **ainda não publicada em produção** no sentido da regra do
+Firestore: ver o callout "🚧 Pendência crítica" no topo deste arquivo
+(regra v0.5.0 só existe localmente) e os callouts de dado de teste/
+tenant órfão ainda pendentes de decisão. Detalhe completo da mudança na
+entrada v0.5.0 do Histórico de Versões, no final deste arquivo.
 
-**Versão anterior: v0.4.2** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow) — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
+**Duas versões atrás: v0.4.2** — Fase 1 (setup) e Fase 2 (CRUD de OS + workflow)
 completas. Ambiente de emissão de NF pronto em modo de teste (Fase 3 em
 andamento, provedor real ainda não conectado). Catálogo completo de
 serviços/peças (~165 itens) importado do sistema legado. Workflow de OS
@@ -352,33 +365,64 @@ Catálogo de itens que podem entrar num orçamento — nome, tipo
 (serviço/peça), preço. É a partir daqui que a tela de "Nova OS" sugere
 itens clicáveis.
 
-### 5.6 Ordens de Serviço (`app/(app)/orders/page.tsx` + `orders/[id]/page.tsx`)
-**Módulo central do sistema.**
+### 5.6 Ordens de Serviço (`app/(app)/orders/nova` + `orders/[id]/page.tsx`)
+**Módulo central do sistema.** Reescrito na v0.5.0 (ver Histórico) —
+descrição abaixo já reflete o modelo atual, não o pré-reconcepção.
 
-- **Criação rápida** (`orders/page.tsx`, componente `NewOrderForm`): numa
-  única tela — seleciona cliente existente OU digita nome+telefone de um
-  novo; seleciona veículo existente (filtrado pelo cliente) OU digita
-  placa+modelo de um novo; **busca serviços/peças por autocomplete**
-  (campo de texto, filtra por nome/código/cód. barras normalizado sem
-  acento, até 8 resultados num dropdown, navegável com ↑↓/Enter — desde
-  v0.4.0; antes disso a tela listava os ~165 itens do catálogo inteiro
-  como "chips" de uma vez, o que ficava ilegível — ver seção 6.11), ou
-  lança um **item avulso** (descrição + tipo + preço livre, sem vincular
-  ao catálogo — pra quando ainda não se sabe o serviço/peça exato, só o
-  preço estimado); total calculado em tempo real. Ao submeter, cria
-  cliente/veículo novos se necessário e a OS já nasce com
-  `status: 'diagnostico'`.
-- **Detalhe e workflow** (`orders/[id]/page.tsx`): botões de ação mudam
-  conforme o `status` atual:
-  - `diagnostico` → campo de prazo opcional + botão "Aprovar orçamento e
-    abrir O.S." → `em_servico` (aprovação já inicia a execução, num só
-    passo)
-  - `em_servico` → botão "Concluir serviço" → `finalizado`
-  - `finalizado` (sem `invoiceRequested`) → botão "Marcar para emissão de
-    NF" → seta `invoiceRequested: true` (não muda o `status` ainda)
-  - Depois de flegado, a OS entra na fila do módulo de Notas Fiscais (5.7)
-- **`app/(app)/orders/page.tsx` também é a tela de listagem** — tabela com
-  status colorido, cliente, veículo, total, data.
+- **Abertura** (`orders/nova/page.tsx`): só o cliente é obrigatório
+  (existente via busca/autocomplete, ou nome+telefone de um novo).
+  Veículo e queixa aparecem na mesma tela mas são opcionais — sem carro
+  definido, a OS nasce mesmo assim e o veículo vira uma **pendência**
+  dentro dela. Nenhum bloco fica escondido atrás de preencher o anterior
+  (foi exatamente essa dependência que reprovou a v0.4.x).
+- **Detalhe e workflow** (`orders/[id]/page.tsx`), montado a partir de
+  componentes em `components/orders/`:
+  - `PendenciasOS` — o que falta pra OS "andar" (veículo, itens).
+  - `VeiculoDaOS` — vincula/troca/cadastra o veículo DENTRO da OS.
+  - `KmDaOS` (v0.6.0) — km de entrada + intervalo de aviso de retorno
+    (ver detalhe abaixo).
+  - `ItensDaOS` — itens do orçamento.
+  - `AcoesDaOS` — os botões de transição de estágio (ver `OrderStatus`
+    em `lib/orders/status.ts`: diagnóstico → aprovar (com prova: quem
+    autorizou + canal) → em serviço → concluir → finalizado → entregar e
+    receber (baixa com forma de pagamento) → entregue; cancelamento é
+    soft, com motivo, a qualquer momento) e o histórico append-only da OS
+    (`orders/{id}/history`).
+  - Menu **🖨️ Imprimir** no cabeçalho: Orçamento (assinatura do
+    cliente), O.S. (bancada) e **Termo de Garantia** (v0.6.0) — as três
+    abrem `orders/[id]/imprimir?doc=orcamento|os|garantia`.
+- **`app/(app)/orders/page.tsx`** é a listagem — tabela com status
+  colorido, cliente, veículo, total, data.
+
+**Quilometragem e aviso de retorno (`KmDaOS`, v0.6.0):** ao vincular um
+veículo à OS, dá pra registrar o **km de entrada** e a cada quantos km
+avisar o retorno (padrão sugerido: 3.000 km, editável por OS —
+`Order.entryKm` / `Order.reminderKmInterval`, ver `lib/orders/km.ts`).
+Sem sensor/telemetria no carro, o sistema não sabe o km dele fora dos
+atendimentos — então o "aviso no sistema" funciona assim: quando o MESMO
+veículo volta numa OS nova, o sistema compara o km novo com o km-alvo
+calculado na visita anterior e mostra um banner (verde/âmbar/vermelho
+conforme a distância) dentro da própria OS e também na ficha do veículo
+(`vehicles/[id]`). Cada OS com km registrado ganha um botão **"📧 Enviar
+aviso de retorno"**, que chama a Cloud Function `enviarAvisoRetorno` —
+sempre envia pro e-mail cadastrado do cliente (`Customer.email`), sem
+modo de teste (ver seção 6.12); pra validar o conteúdo, cadastre o
+próprio e-mail como e-mail de um cliente de teste.
+
+**Painel de Retorno (`/retorno`, v0.6.0):** a visão proativa que
+faltava — antes o aviso só aparecia quando o veículo VOLTAVA numa OS
+nova (seção acima). A tela nova (`app/(app)/retorno/page.tsx`, item
+"Painel de Retorno" no menu Operação) lista, num grid de cartões (um
+por veículo), todo veículo com km registrado em alguma OS, ordenado do
+mais provável de já estar atrasado pro menos. `returnPanelItemsOf`
+(`lib/orders/km.ts`) só atribui um nível de urgência
+(atrasado/próximo/programado) quando o veículo tem 2+ visitas com km —
+aí dá pra calcular a média real de km/dia percorrida entre elas e
+estimar o km de hoje. Com só 1 visita registrada, o cartão mostra a
+última visita e o km-alvo sem alegar atraso — deliberadamente nunca
+inventa uma média de km/dia genérica só pra forçar uma estimativa.
+Busca por cliente/veículo no topo da tela, seguindo o padrão obrigatório
+da seção 6.11.
 
 ### 5.7 Notas Fiscais (`app/(app)/invoices/page.tsx`)
 Fila de OS `finalizado` + `invoiceRequested: true` que ainda não têm
@@ -406,6 +450,12 @@ endereço, e-mail de contato. Pré-carrega de `clients/{clientId}`
 (`watchClient`) e salva com `updateClient`. **Só visível/editável pelo
 gestor** — outros papéis veem uma mensagem de acesso restrito (gate só
 na UI, não na regra do Firestore — ver seção 3.1).
+
+**Desde v0.6.0:** também tem os campos do **Termo de Garantia** —
+`warrantyDaysService` (dias corridos, sugestão de 90 pré-preenchida, Art.
+26 do CDC) e `warrantyNotes` (observação livre, ex.: exceções). Usados só
+na impressão `doc=garantia` de cada OS (seção 5.6) — não é assessoria
+jurídica, é texto de partida editável pelo gestor.
 
 ### 5.11 Usuários (`app/(app)/usuarios/page.tsx`) — desde v0.4.0
 Lista os membros da oficina (`clients/{clientId}/members`, via
@@ -521,6 +571,17 @@ deploy/infra até o fim sem pausar por autorização extra) — aquilo é sobre
 *completude* do trabalho antes de considerar terminado; isso aqui é sobre
 *quando publicar* (`git commit`/`push`) o que já foi implementado.
 
+**Nuance de sessão remota (Claude Code on the web/cloud, desde 2026-09):**
+quando a sessão roda num container remoto/efêmero (não no Mac do
+Alcides), não existe `localhost:3000` pra deixar rodando pra ele — o
+container é reciclado ao fim da sessão. Nesse modo, o fluxo equivalente é
+commitar na branch de trabalho (nunca `main` diretamente), dar push e
+abrir um **Pull Request como rascunho (draft)** — a revisão/teste do PR
+por ele (ou puxando a branch localmente) É a homologação. Só depois que
+ele aprovar/mergear é que a mudança vira produção de verdade. Isso não
+revoga a regra acima: só troca "esperar ele navegar o localhost" por
+"esperar ele revisar/testar o PR" quando o ambiente de execução é remoto.
+
 ### 6.9 A conta "de teste" é a conta real — não criar outra
 Durante o desenvolvimento, criei uma conta `teste@mecos.com` só pra testar
 telas. O catálogo completo de 165 itens (extraído de vídeo, ver v0.2.2) e
@@ -616,6 +677,73 @@ Serviços e Peças, é o modelo a copiar (mais simples que o dropdown de
 Nova OS, que só se justifica quando a ação é "inserir item em outra
 lista").
 
+### 6.12 Aviso de retorno por e-mail (v0.6.0) — Cloud Function, NÃO IMPLANTADA ainda
+
+Escrita nesta sessão, mas **nunca implantada nem testada de verdade** —
+este ambiente de desenvolvimento (Claude Code remoto/cloud) não tem
+`firebase-tools` autenticado, então o deploy de Cloud Functions é manual,
+igual à publicação de regra do Firestore (seção 6.10) e ao `git push`
+(seção 6.6), só que numa ferramenta diferente. `npx tsc --noEmit` e
+`npm run build` do pacote `firebase/` rodaram limpos, então o código
+compila — mas "compila" não é "testado em produção".
+
+**O que existe:** `firebase/src/index.ts` exporta `enviarAvisoRetorno`,
+uma Cloud Function `onCall` (região `southamerica-east1`, igual ao
+Firestore) que: confere que quem chamou pertence à oficina (mesmo
+princípio do `isMember()` da regra do Firestore), lê a OS e o cliente,
+monta um e-mail com veículo + km de entrada + km-alvo do retorno, e
+envia via **Gmail SMTP com Nodemailer** (pacote `nodemailer` adicionado
+em `firebase/package.json`).
+
+**Por que Nodemailer + senha de app, e não a Gmail API com OAuth:** o
+Alcides pediu explicitamente pra testar primeiro com o e-mail dele
+(`35alcides@gmail.com`) antes de pensar em conectar a conta Google de
+cada oficina-cliente ("API do cliente que também é Google") — isso é
+trabalho de infraestrutura bem maior (tela de consentimento OAuth no
+Google Cloud, token por tenant) que só vale a pena quando houver mais de
+uma oficina real usando o recurso. Nodemailer com senha de app é o
+caminho mais rápido pra validar o TEXTO e o GATILHO do aviso agora; a
+troca pra Gmail API OAuth por oficina fica documentada aqui como o passo
+seguinte, não como decisão tomada.
+
+**Sem modo de teste — envia direto pro e-mail do cliente:** a function
+sempre lê `customer.email` da OS e manda pra lá (erro
+`failed-precondition` se o cliente não tiver e-mail cadastrado — cadastro
+em Clientes é opcional hoje). Decisão do Alcides (2026-09-07): não vale a
+pena manter um config de "override de teste" que depois alguém precisa
+lembrar de desligar — mais simples validar o conteúdo cadastrando o
+próprio e-mail (`35alcides@gmail.com`) como e-mail de um cliente de
+teste na conta RRadiadores, pelo MESMO caminho que vai valer pro cliente
+real depois.
+
+**Passo a passo pra ativar (o Alcides precisa fazer, local, com
+`firebase-tools` instalado):**
+
+1. Gerar uma **senha de app** do Google para `35alcides@gmail.com` — a
+   conta precisa ter verificação em duas etapas ativa
+   ([myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)).
+   Guardar a senha de 16 caracteres gerada.
+2. `cd firebase && npm install` (traz o `nodemailer` novo).
+3. Configurar a função (substitua pela senha de app real):
+   ```
+   firebase functions:config:set \
+     gmail.user="35alcides@gmail.com" \
+     gmail.pass="SENHA_DE_APP_16_CARACTERES"
+   ```
+4. `npm run build && firebase deploy --only functions` (primeiro deploy
+   de uma função real deste projeto — `helloWorld` nunca foi usado).
+5. Testar: numa O.S. cujo cliente tenha `35alcides@gmail.com` cadastrado
+   como e-mail, registrar o km em `KmDaOS` e clicar "📧 Enviar aviso de
+   retorno" — deve chegar nesse e-mail. Pra um cliente real, o mesmo
+   botão já funciona sem nenhum passo extra, desde que ele tenha e-mail
+   cadastrado em Clientes.
+
+**Limitação conhecida, por design:** não existe monitoramento
+automático/agendado — o aviso só é enviado quando alguém clica o botão
+dentro da OS. Um lembrete agendado de verdade (ex.: "avisar 3 dias antes
+da data estimada") exigiria Cloud Scheduler + Functions rodando sozinhas,
+que é trabalho futuro, não coberto aqui.
+
 ---
 
 ## 7. Fluxo de Deploy Atual
@@ -632,9 +760,18 @@ lista").
     (usado pra eu testar via browser automation antes de pedir
     homologação — não deixar rodando depois, pra não conflitar com a
     porta 3000 quando ele for usar o `.command`).
-  **Ainda não publicado no Hostinger** — existe um workflow do GitHub
-  Actions (`.github/workflows/deploy.yml`) preparado mas incompleto (sem
-  secrets configurados, sem script de deploy real).
+  **Deploy real em preparação (2026-09-07):** confirmado que o plano do
+  Alcides na Hostinger é uma **VPS** (não hospedagem compartilhada) — dá
+  pra rodar o Next.js como está, sem reescrever as telas com ID pra um
+  formato estático. `.github/workflows/deploy.yml` já tem lógica real
+  (SSH via `appleboy/ssh-action` → `git pull` + `npm run build` na
+  própria VPS + restart do PM2), mas **ainda não foi executado de ponta
+  a ponta** — falta o setup único da VPS (Node, PM2, clone do repo,
+  copiar o `.env.local` real) e os 3 secrets no GitHub
+  (`HOSTINGER_HOST`/`HOSTINGER_USER`/`HOSTINGER_PASS`). Passo a passo
+  completo em [`docs/DEPLOY-HOSTINGER-VPS.md`](docs/DEPLOY-HOSTINGER-VPS.md).
+  Até esse setup ser feito, o workflow falha sozinho no passo de SSH
+  (autenticação), sem efeito nenhum — seguro deixar mergeado esperando.
 - **Backend:** Firebase Auth + Firestore já estão em produção real (projeto
   `sistema-os-ef1ef`, região São Paulo). Cloud Functions existe só como
   placeholder, nada em uso.
@@ -663,6 +800,78 @@ lista").
 
 > Atualizar esta seção a cada mudança relevante — resumo curto, não
 > changelog verboso linha-a-linha (isso já existe no `git log`).
+
+- **v0.6.0** (2026-09-07) — Três melhorias pedidas pelo Alcides, feitas
+  numa sessão remota (Claude Code on the web, branch `claude/oi-oe95jt`)
+  em duas rodadas — as duas primeiras vieram do pedido original, a
+  terceira (Painel de Retorno) foi pedida durante a mesma revisão, ao
+  ver o aviso de km funcionando:
+
+  **(1) Termo de Garantia na impressão.** Terceira opção no menu
+  🖨️ Imprimir da OS (`orders/[id]/imprimir?doc=garantia`, ao lado de
+  Orçamento e O.S.). Texto padrão referenciando o Art. 26 (vícios
+  aparentes) e Arts. 18/20 (vícios ocultos) do CDC, prazo configurável
+  (`Client.warrantyDaysService`, sugestão 90 dias) e observação livre
+  (`Client.warrantyNotes`) editáveis na tela Oficina (seção 5.10). Lista
+  os itens da OS como cobertos pela mão de obra, com nota de que peças
+  seguem garantia do fabricante. Recorte deliberado: texto de partida,
+  não assessoria jurídica — fica marcado na própria tela Oficina.
+
+  **(2) Km de entrada + aviso de retorno.** Novo componente `KmDaOS`
+  (`components/orders/KmDaOS.tsx`) na tela de detalhe da OS, entre
+  Veículo e Itens: registra `Order.entryKm` e `Order.reminderKmInterval`
+  (sugestão 3.000 km). `lib/orders/km.ts` calcula o km-alvo e compara com
+  a última OS do MESMO veículo que teve km registrado — sem telemetria
+  do carro, é o único jeito de detectar "já passou do km previsto": só
+  quando ele volta e alguém digita o km de novo. O aviso aparece como
+  banner (verde=programado, âmbar=próximo, vermelho=atrasado) dentro da
+  OS nova e como card informativo na ficha do veículo
+  (`vehicles/[id]/page.tsx`).
+
+  Além do aviso "no sistema", cada OS com km registrado ganha um botão
+  **"📧 Enviar aviso de retorno"**, que chama a Cloud Function nova
+  `enviarAvisoRetorno` (`firebase/src/index.ts`, Nodemailer + Gmail SMTP)
+  — sempre envia pro e-mail cadastrado do cliente, **sem modo de teste**:
+  o Alcides pediu explicitamente pra não ter esse mecanismo ("não é
+  preciso de módulo de teste, faça operacionalmente funcionando, apenas
+  substituiremos pelo email do cliente") — pra validar antes do deploy,
+  a ideia é cadastrar o próprio e-mail como e-mail de um cliente de
+  teste, em vez de a function ter um caminho especial só pra isso. Ver
+  seção 6.12 pro runbook completo (senha de app, deploy manual — nada
+  disso foi implantado nem testado em produção ainda, porque este
+  ambiente não tem `firebase-tools` autenticado). O caminho
+  Nodemailer+senha de app é deliberadamente o mais simples possível pra
+  validar o conteúdo do aviso agora; a Gmail API com OAuth por
+  oficina-cliente (o que o Alcides descreveu como próximo passo, "API do
+  cliente que também é Google") fica documentada como trabalho futuro,
+  não implementada nesta sessão.
+
+  **(3) Painel de Retorno.** Tela nova (`/retorno`, item próprio no menu
+  Operação) que faltava: uma visão proativa de "quem já deve estar na
+  hora de voltar", em vez de só descobrir quando o veículo volta sozinho.
+  Pedido do Alcides: "um painel de retorno... como se fosse uma colmeia,
+  vários quadrados com nome do cliente e veículo". `returnPanelItemsOf`
+  (novo em `lib/orders/km.ts`) agrupa as OS por veículo e, quando há 2+
+  visitas com km registrado, estima o km de hoje pela média real de
+  km/dia entre as duas últimas — só então classifica como atrasado/
+  próximo/programado. Com 1 visita só, o cartão mostra a última visita e
+  o km-alvo sem alegar atraso: decisão deliberada de não inventar uma
+  média de km/dia genérica sem dado real que a sustente. Grid responsivo
+  de cartões coloridos por urgência, com busca por cliente/veículo no
+  topo (padrão 6.11), cada cartão levando pra ficha do veículo.
+
+  **Verificado nesta sessão:** `npx tsc --noEmit` limpo em
+  `frontend-web/` e em `firebase/` (`npm run build` também limpo, nas
+  duas rodadas). **Não verificado:** o app não foi executado no
+  navegador (sessão remota sem browser automation disponível desta vez)
+  nem a Cloud Function foi implantada/testada de ponta a ponta — cabe ao
+  Alcides confirmar visual e funcionalmente ao revisar o PR.
+
+  **Pendente:** (a) revisão/homologação do PR pelo Alcides; (b) deploy
+  manual da Cloud Function + configuração da senha de app (seção 6.12);
+  (c) tudo que já estava pendente da v0.5.0 (regra do Firestore, dado de
+  teste, tenant órfão — ver callouts no topo do arquivo), que esta sessão
+  não tocou.
 
 - **v0.5.0** (2026-08-17) — Reconcepção completa depois do Alcides reprovar
   a v0.4.2 com 3 reclamações concretas (print em mãos). Resolve as três:
@@ -783,12 +992,20 @@ lista").
   callout no topo do arquivo) — `window.confirm()` do "Apagar rascunho"
   travou a automação do navegador antes de eu confirmar a exclusão.
 
-  **Pendente antes de ir pra produção**: (a) homologação do Alcides —
-  nenhum commit foi feito, ver seção 6.8; (b) publicar
-  `firebase/firestore.rules` v0.5.0 manualmente (seção 6.10 +
-  `docs/ADMIN-RUNBOOK.md`) — sem isso, `/admin` não tem como logar
-  ninguém de verdade; (c) decidir o que fazer com a O.S. de teste
-  "Maria Testando Balcao" e com o tenant órfão "35alcides".
+  **Atualização (2026-08-21):** homologado pelo Alcides e commitado/
+  enviado ao GitHub (`42855f7`) — a ressalva (a) abaixo está resolvida.
+  Seguem pendentes: (b) publicar `firebase/firestore.rules` v0.5.0
+  manualmente (seção 6.10 + `docs/ADMIN-RUNBOOK.md`) — sem isso,
+  `/admin` não tem como logar ninguém de verdade; (c) decidir o que
+  fazer com a O.S. de teste "Maria Testando Balcao" e com o tenant
+  órfão "35alcides".
+
+  **Pendente antes de ir pra produção** (registro original, mantido por
+  histórico): (a) ~~homologação do Alcides — nenhum commit foi feito, ver
+  seção 6.8~~; (b) publicar `firebase/firestore.rules` v0.5.0 manualmente
+  (seção 6.10 + `docs/ADMIN-RUNBOOK.md`) — sem isso, `/admin` não tem
+  como logar ninguém de verdade; (c) decidir o que fazer com a O.S. de
+  teste "Maria Testando Balcao" e com o tenant órfão "35alcides".
 
 - **v0.4.2** (2026-08-13) — Corrigido bug real em `services/page.tsx`: a
   busca ficava logo abaixo do campo "Nome" do formulário de cadastro,

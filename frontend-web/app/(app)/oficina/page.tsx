@@ -14,6 +14,8 @@ export default function OficinaPage() {
   const [address, setAddress] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [warrantyDays, setWarrantyDays] = useState('90')
+  const [warrantyNotes, setWarrantyNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -27,6 +29,8 @@ export default function OficinaPage() {
       setAddress(c.address ?? '')
       setPhone(c.phone ?? '')
       setEmail(c.email ?? '')
+      setWarrantyDays(String(c.warrantyDaysService ?? 90))
+      setWarrantyNotes(c.warrantyNotes ?? '')
     })
   }, [clientId])
 
@@ -42,6 +46,9 @@ export default function OficinaPage() {
     if (address) data.address = address
     if (phone) data.phone = phone
     if (email) data.email = email
+    const warrantyDaysNum = Number(warrantyDays.replace(/\D/g, ''))
+    data.warrantyDaysService = warrantyDaysNum > 0 ? warrantyDaysNum : 90
+    if (warrantyNotes) data.warrantyNotes = warrantyNotes
     await updateClient(clientId, data)
     setSaving(false)
     setSaved(true)
@@ -126,6 +133,42 @@ export default function OficinaPage() {
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
             placeholder="contato@suaoficina.com"
           />
+        </div>
+
+        <div className="border-t border-gray-100 pt-4">
+          <h2 className="mb-1 text-sm font-semibold text-gray-900">Termo de Garantia</h2>
+          <p className="mb-3 text-xs text-gray-500">
+            Usado na impressão "Termo de Garantia" de cada O.S. (menu Imprimir). O prazo padrão de
+            90 dias segue o Art. 26 do Código de Defesa do Consumidor para vícios em serviços —
+            ajuste se sua oficina pratica outro prazo. Não é assessoria jurídica; vale revisar com
+            um advogado ou contador se quiser o texto definitivo.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-600">
+                Garantia dos serviços (dias corridos)
+              </label>
+              <input
+                inputMode="numeric"
+                value={warrantyDays}
+                onChange={(e) => setWarrantyDays(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                placeholder="90"
+              />
+            </div>
+          </div>
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              Observações adicionais (opcional)
+            </label>
+            <textarea
+              value={warrantyNotes}
+              onChange={(e) => setWarrantyNotes(e.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder="Ex: garantia não cobre uso em competição, peças de terceiros instaladas depois, etc."
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-3 pt-2">

@@ -5,12 +5,19 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useClientId } from '@/lib/hooks/useClientId'
 import { useAuth } from '@/lib/hooks/useAuth'
-import { watchOrder, watchVehicles, watchCustomers, watchServices } from '@/lib/firebase/firestore'
+import {
+  watchOrder,
+  watchOrders,
+  watchVehicles,
+  watchCustomers,
+  watchServices,
+} from '@/lib/firebase/firestore'
 import { Order, Vehicle, Customer, ServiceItem } from '@/lib/types'
 import { statusColorOf, statusLabelOf } from '@/lib/orders/status'
 import { orderLabel, vehicleLabel } from '@/lib/orders/format'
 import PendenciasOS from '@/components/orders/PendenciasOS'
 import VeiculoDaOS from '@/components/orders/VeiculoDaOS'
+import KmDaOS from '@/components/orders/KmDaOS'
 import ItensDaOS from '@/components/orders/ItensDaOS'
 import AcoesDaOS from '@/components/orders/AcoesDaOS'
 
@@ -32,6 +39,7 @@ export default function OrderDetailPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [services, setServices] = useState<ServiceItem[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
   const [menuImpressao, setMenuImpressao] = useState(false)
 
   useEffect(() => {
@@ -43,11 +51,15 @@ export default function OrderDetailPage() {
     const u2 = watchVehicles(clientId, setVehicles)
     const u3 = watchCustomers(clientId, setCustomers)
     const u4 = watchServices(clientId, setServices)
+    // Só pra achar o histórico de km do MESMO veículo (ver KmDaOS/lib/orders/km.ts) —
+    // não usado pra listar nada nesta tela.
+    const u5 = watchOrders(clientId, setOrders)
     return () => {
       u1()
       u2()
       u3()
       u4()
+      u5()
     }
   }, [clientId, params.id])
 
@@ -174,6 +186,13 @@ export default function OrderDetailPage() {
                 >
                   O.S. (para a bancada)
                 </Link>
+                <Link
+                  href={`/orders/${order.id}/imprimir?doc=garantia`}
+                  target="_blank"
+                  className="block border-t border-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  Termo de Garantia
+                </Link>
               </div>
             )}
           </div>
@@ -182,6 +201,7 @@ export default function OrderDetailPage() {
 
       <PendenciasOS clientId={clientId} order={order} customer={customer} onGoTo={irPara} />
       <VeiculoDaOS clientId={clientId} order={order} vehicles={vehicles} by={by} />
+      <KmDaOS clientId={clientId} order={order} orders={orders} customer={customer} by={by} />
       <ItensDaOS clientId={clientId} order={order} services={services} by={by} />
       <AcoesDaOS clientId={clientId} order={order} by={by} />
     </div>
