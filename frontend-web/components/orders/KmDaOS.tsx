@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Order, Customer } from '@/lib/types'
 import { isCancelled, statusOf } from '@/lib/orders/status'
 import { setOrderKm } from '@/lib/firebase/firestore'
-import { enviarAvisoRetorno } from '@/lib/firebase/notifications'
+import { sendReturnReminder } from '@/lib/firebase/email'
 import { DEFAULT_REMINDER_KM_INTERVAL, kmAlertOf, kmTargetOf, lastKmOrderOf } from '@/lib/orders/km'
 import { orderLabel } from '@/lib/orders/format'
 
@@ -105,8 +105,8 @@ export default function KmDaOS({ clientId, order, orders, customer, by }: KmDaOS
     setErroEnvio('')
     setAvisoEnviado(null)
     try {
-      const r = await enviarAvisoRetorno(clientId, order.id)
-      setAvisoEnviado(`Enviado para ${r.sentTo}.`)
+      await sendReturnReminder(order.id, clientId)
+      setAvisoEnviado(`Enviado para ${customer?.email || 'o cliente'}.`)
     } catch (e) {
       console.error(e)
       setErroEnvio(
