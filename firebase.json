@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "source": "firebase",
+    "codebase": "default",
+    "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
+  },
+  "firestore": {
+    "rules": "firebase/firestore.rules"
+  }
+}
