@@ -180,9 +180,9 @@ Requisitos originais do produto (pedido do dono, Alcides):
 |---|---|
 | Frontend Web | Next.js 14 (App Router) + TypeScript + Tailwind CSS |
 | Mobile | React Native + Expo (estrutura criada, telas não implementadas ainda) |
-| Backend | Firebase (Firestore + Authentication) |
-| Cloud Functions | Firebase Functions v4 (só placeholder `helloWorld` até agora — nada de produção usa Functions ainda; toda lógica hoje roda client-side direto no Firestore) |
-| Hospedagem alvo | Hostinger (frontend) — **ainda não implantado**, hoje só roda em `localhost:3000` via `npm run dev` |
+| Backend | Firebase (Firestore + Authentication) + Node.js/Express na VPS (serviços com efeito colateral: envio de e-mail) |
+| Hospedagem Frontend | Hostinger VPS (desde v0.6.0, **LIVE em produção** em https://mecos.srv1697060.hstgr.cloud/) |
+| Hospedagem Backend Serviços | Hostinger VPS (PM2 rodando Next.js) |
 | Banco de dados | Cloud Firestore, região `southamerica-east1` (São Paulo) |
 | Repositório | [github.com/Alcidesmov/sistema-os](https://github.com/Alcidesmov/sistema-os) |
 | Projeto Firebase | `sistema-os-ef1ef` |
@@ -685,72 +685,62 @@ Serviços e Peças, é o modelo a copiar (mais simples que o dropdown de
 Nova OS, que só se justifica quando a ação é "inserir item em outra
 lista").
 
-### 6.12 Aviso de retorno por e-mail (v0.6.0) — Cloud Function, NÃO IMPLANTADA ainda
+### 6.12 Aviso de retorno por e-mail (v0.6.0) — VPS Endpoint (desde v0.6.1)
 
-Escrita nesta sessão, mas **nunca implantada nem testada de verdade** —
-este ambiente de desenvolvimento (Claude Code remoto/cloud) não tem
-`firebase-tools` autenticado, então o deploy de Cloud Functions é manual,
-igual à publicação de regra do Firestore (seção 6.10) e ao `git push`
-(seção 6.6), só que numa ferramenta diferente. `npx tsc --noEmit` e
-`npm run build` do pacote `firebase/` rodaram limpos, então o código
-compila — mas "compila" não é "testado em produção".
+Inicialmente escrito como Cloud Function do Firebase (`firebase/src/index.ts`),
+mas **Cloud Functions requer plano Blaze (pay-as-you-go)**. Mudança de
+estratégia (2026-09-09): como o MecOS já está rodando numa **VPS
+Hostinger** desde v0.6.0 (ver seção 7), é muito mais simples (e zero custo
+extra) adicionar um endpoint Node.js/Express nessa mesma VPS pra enviar
+e-mail, em vez de usar Firebase Cloud Functions.
 
-**O que existe:** `firebase/src/index.ts` exporta `enviarAvisoRetorno`,
-uma Cloud Function `onCall` (região `southamerica-east1`, igual ao
-Firestore) que: confere que quem chamou pertence à oficina (mesmo
-princípio do `isMember()` da regra do Firestore), lê a OS e o cliente,
-monta um e-mail com veículo + km de entrada + km-alvo do retorno, e
-envia via **Gmail SMTP com Nodemailer** (pacote `nodemailer` adicionado
-em `firebase/package.json`).
+**O que vai existir:** um endpoint `/api/send-return-reminder` na VPS
+(adicionado ao servidor Next.js ou a um serviço Node.js standalone
+rodando em paralelo) que:
+1. Recebe `{orderId, clientId}` do frontend (autenticado via Firebase Token)
+2. Valida que o usuário pertence àquele `clientId` (mesmo princípio do
+   `isMember()` da regra do Firestore)
+3. Lê a OS e o cliente do Firestore
+4. Monta um e-mail com veículo + km de entrada + km-alvo do retorno
+5. Envia via **Gmail SMTP com Nodemailer** (pacote já em
+   `frontend-web/package.json` e `firebase/package.json`)
 
-**Por que Nodemailer + senha de app, e não a Gmail API com OAuth:** o
-Alcides pediu explicitamente pra testar primeiro com o e-mail dele
-(`35alcides@gmail.com`) antes de pensar em conectar a conta Google de
-cada oficina-cliente ("API do cliente que também é Google") — isso é
-trabalho de infraestrutura bem maior (tela de consentimento OAuth no
-Google Cloud, token por tenant) que só vale a pena quando houver mais de
-uma oficina real usando o recurso. Nodemailer com senha de app é o
-caminho mais rápido pra validar o TEXTO e o GATILHO do aviso agora; a
-troca pra Gmail API OAuth por oficina fica documentada aqui como o passo
-seguinte, não como decisão tomada.
+**Por que Nodemailer + senha de app (e não Gmail API OAuth):** o Alcides
+pediu explicitamente pra testar primeiro com o e-mail dele
+(`35alcides@gmail.com`) antes de pensar em conectar a conta Google de cada
+oficina-cliente — isso é trabalho de infraestrutura bem maior (tela de
+consentimento OAuth, token por tenant) que só vale a pena quando houver
+mais de uma oficina real usando o recurso. Nodemailer com senha de app é
+o caminho mais rápido pra validar o TEXTO e o GATILHO agora; a troca pra
+Gmail API OAuth por oficina fica documentada como passo seguinte.
 
-**Sem modo de teste — envia direto pro e-mail do cliente:** a function
-sempre lê `customer.email` da OS e manda pra lá (erro
-`failed-precondition` se o cliente não tiver e-mail cadastrado — cadastro
-em Clientes é opcional hoje). Decisão do Alcides (2026-09-07): não vale a
+**Sem modo de teste — envia direto pro e-mail do cliente:** o endpoint
+sempre lê `customer.email` da OS e manda pra lá (retorna erro se cliente
+não tiver e-mail cadastrado). Decisão do Alcides (2026-09-07): não vale a
 pena manter um config de "override de teste" que depois alguém precisa
-lembrar de desligar — mais simples validar o conteúdo cadastrando o
-próprio e-mail (`35alcides@gmail.com`) como e-mail de um cliente de
-teste na conta RRadiadores, pelo MESMO caminho que vai valer pro cliente
-real depois.
+lembrar de desligar — mais simples validar o conteúdo cadastrando o próprio
+e-mail (`35alcides@gmail.com`) como e-mail de um cliente de teste, pelo
+MESMO caminho que vai valer pro cliente real depois.
 
-**Passo a passo pra ativar (o Alcides precisa fazer, local, com
-`firebase-tools` instalado):**
+**Passo a passo pra ativar:**
 
 1. Gerar uma **senha de app** do Google para `35alcides@gmail.com` — a
    conta precisa ter verificação em duas etapas ativa
    ([myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)).
-   Guardar a senha de 16 caracteres gerada.
-2. `cd firebase && npm install` (traz o `nodemailer` novo).
-3. Configurar a função (substitua pela senha de app real):
+2. Na VPS Hostinger, adicionar as variáveis de ambiente:
+   ```bash
+   echo "GMAIL_USER=35alcides@gmail.com" >> /home/mecos/.env.production.local
+   echo "GMAIL_PASS=SENHA_DE_APP_16_CARACTERES" >> /home/mecos/.env.production.local
    ```
-   firebase functions:config:set \
-     gmail.user="35alcides@gmail.com" \
-     gmail.pass="SENHA_DE_APP_16_CARACTERES"
-   ```
-4. `npm run build && firebase deploy --only functions` (primeiro deploy
-   de uma função real deste projeto — `helloWorld` nunca foi usado).
-5. Testar: numa O.S. cujo cliente tenha `35alcides@gmail.com` cadastrado
+3. Deploy do código: o GitHub Actions workflow já entra o novo endpoint pra
+   VPS (via `git pull` + `npm run build` + PM2 restart).
+4. Testar: numa O.S. cujo cliente tenha `35alcides@gmail.com` cadastrado
    como e-mail, registrar o km em `KmDaOS` e clicar "📧 Enviar aviso de
-   retorno" — deve chegar nesse e-mail. Pra um cliente real, o mesmo
-   botão já funciona sem nenhum passo extra, desde que ele tenha e-mail
-   cadastrado em Clientes.
+   retorno" — deve chegar nesse e-mail.
 
 **Limitação conhecida, por design:** não existe monitoramento
 automático/agendado — o aviso só é enviado quando alguém clica o botão
-dentro da OS. Um lembrete agendado de verdade (ex.: "avisar 3 dias antes
-da data estimada") exigiria Cloud Scheduler + Functions rodando sozinhas,
-que é trabalho futuro, não coberto aqui.
+dentro da OS. Um lembrete agendado de verdade exigiria trabalho futuro.
 
 ---
 
@@ -781,8 +771,9 @@ que é trabalho futuro, não coberto aqui.
   Até esse setup ser feito, o workflow falha sozinho no passo de SSH
   (autenticação), sem efeito nenhum — seguro deixar mergeado esperando.
 - **Backend:** Firebase Auth + Firestore já estão em produção real (projeto
-  `sistema-os-ef1ef`, região São Paulo). Cloud Functions existe só como
-  placeholder, nada em uso.
+  `sistema-os-ef1ef`, região São Paulo). Serviços com efeito colateral
+  (e-mail, future webhooks) rodam direto na VPS via Node.js/Express,
+  eliminando a necessidade de Cloud Functions (que exigiria Blaze plan pago).
 - **Mobile:** estrutura Expo criada (`mobile/`), mas **nenhuma tela
   implementada** — só o placeholder inicial do `App.tsx`.
 
@@ -837,22 +828,13 @@ que é trabalho futuro, não coberto aqui.
   (`vehicles/[id]/page.tsx`).
 
   Além do aviso "no sistema", cada OS com km registrado ganha um botão
-  **"📧 Enviar aviso de retorno"**, que chama a Cloud Function nova
-  `enviarAvisoRetorno` (`firebase/src/index.ts`, Nodemailer + Gmail SMTP)
-  — sempre envia pro e-mail cadastrado do cliente, **sem modo de teste**:
-  o Alcides pediu explicitamente pra não ter esse mecanismo ("não é
-  preciso de módulo de teste, faça operacionalmente funcionando, apenas
-  substituiremos pelo email do cliente") — pra validar antes do deploy,
-  a ideia é cadastrar o próprio e-mail como e-mail de um cliente de
-  teste, em vez de a function ter um caminho especial só pra isso. Ver
-  seção 6.12 pro runbook completo (senha de app, deploy manual — nada
-  disso foi implantado nem testado em produção ainda, porque este
-  ambiente não tem `firebase-tools` autenticado). O caminho
-  Nodemailer+senha de app é deliberadamente o mais simples possível pra
-  validar o conteúdo do aviso agora; a Gmail API com OAuth por
-  oficina-cliente (o que o Alcides descreveu como próximo passo, "API do
-  cliente que também é Google") fica documentada como trabalho futuro,
-  não implementada nesta sessão.
+  **"📧 Enviar aviso de retorno"**, que vai chamar um endpoint na VPS
+  (desde v0.6.1 — ver seção 6.12 pra detalhe da mudança de Cloud
+  Functions pra VPS endpoint). O endpoint envia pro e-mail cadastrado do
+  cliente via Nodemailer + Gmail SMTP, **sem modo de teste**: o Alcides
+  pediu explicitamente pra testar com o próprio e-mail cadastrado como
+  cliente de teste na conta RRadiadores, em vez de manter um switch
+  especial que depois alguém precisa lembrar de desligar.
 
   **(3) Painel de Retorno.** Tela nova (`/retorno`, item próprio no menu
   Operação) que faltava: uma visão proativa de "quem já deve estar na
@@ -870,10 +852,11 @@ que é trabalho futuro, não coberto aqui.
 
   **Verificado nesta sessão:** `npx tsc --noEmit` limpo em
   `frontend-web/` e em `firebase/` (`npm run build` também limpo, nas
-  duas rodadas). **Não verificado:** o app não foi executado no
-  navegador (sessão remota sem browser automation disponível desta vez)
-  nem a Cloud Function foi implantada/testada de ponta a ponta — cabe ao
-  Alcides confirmar visual e funcionalmente ao revisar o PR.
+  duas rodadas). **Não verificado nesta sessão:** o app não foi executado no
+  navegador (sessão remota sem browser automation disponível desta vez).
+  **Atualização (2026-09-09):** Cloud Functions foi descartado em favor de um
+  endpoint na VPS (ver seção 6.12) — mais simples, zero custo extra, e evita a
+  necessidade de Blaze plan pago do Firebase.
 
   **Atualização (2026-09-08):** homologado e mesclado em `main` pelo
   Alcides (commit `9f9a262`) — a ressalva (a) abaixo está resolvida. A
@@ -892,12 +875,12 @@ que é trabalho futuro, não coberto aqui.
   manual da VPS~~; (b) os 3 secrets no GitHub (HOSTINGER_HOST/USER/PASS)
   pra ativar deploy automático (workflow dispara a cada push pra `main`,
   sem precisar de comandos manuais na VPS) — ver seção 7 e
-  `docs/DEPLOY-HOSTINGER-VPS.md`; (c) deploy manual da Cloud Function +
-  configuração da senha de app (seção 6.12) — necessário pra ativar o botão
-  "📧 Enviar aviso de retorno"; (d) tudo que já estava pendente da v0.5.0
-  (publicar regra do Firestore, decidir sobre dado de teste "Maria Testando
-  Balcao" e tenant órfão "35alcides" — ver callouts no topo do arquivo),
-  que esta sessão não tocou.
+  `docs/DEPLOY-HOSTINGER-VPS.md`; (c) implementar e testar endpoint de
+  envio de e-mail na VPS + configuração da senha de app Google (seção 6.12)
+  — necessário pra ativar o botão "📧 Enviar aviso de retorno"; (d) publicar
+  `firebase/firestore.rules` v0.5.0 no console do Firebase (ver callout no
+  topo do arquivo); (e) decidir sobre dado de teste "Maria Testando Balcao"
+  e tenant órfão "35alcides".
 
 - **v0.5.0** (2026-08-17) — Reconcepção completa depois do Alcides reprovar
   a v0.4.2 com 3 reclamações concretas (print em mãos). Resolve as três:
