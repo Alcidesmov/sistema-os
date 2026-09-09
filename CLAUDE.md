@@ -101,10 +101,14 @@ web), não no Mac dele — por isso o fluxo de homologação foi o de PR
 (ver seção 6.8): PR #1 revisado e **mesclado em `main`** por ele em
 2026-09-08 (commit `9f9a262`). Também inclui o início do deploy real
 na Hostinger (VPS confirmada, workflow com SSH+PM2 real — ver seção 7
-e `docs/DEPLOY-HOSTINGER-VPS.md`); a primeira tentativa automática de
-deploy já rodou e falhou de forma esperada (`missing server host`) por
-faltar o setup manual da VPS e os secrets no GitHub, ainda não feitos.
-Detalhe completo na entrada v0.6.0 do Histórico de Versões.
+e `docs/DEPLOY-HOSTINGER-VPS.md`). **Status de implantação (2026-09-09):**
+o Alcides executou o setup manual da VPS com sucesso e confirmou testes
+rodando — sistema agora está **LIVE em produção em
+https://mecos.srv1697060.hstgr.cloud/** com as três melhorias ativas.
+Pendente: configurar os 3 secrets no GitHub (HOSTINGER_HOST/USER/PASS)
+pra ativar deploy automático — sem eles, o workflow falha na autenticação
+SSH, esperando os secrets antes de rodar pra vvs. Detalhe completo na
+entrada v0.6.0 do Histórico de Versões.
 
 **Versão anterior: v0.5.0** — Reconcepção completa pedida pelo Alcides
 depois de reprovar a v0.4.2 ("carente de navegação"). Resolve as 3
@@ -877,16 +881,23 @@ que é trabalho futuro, não coberto aqui.
   rodou e falhou rápido e sem dano, com `Error: missing server host` —
   esperado, já que os 3 secrets do GitHub ainda não foram cadastrados.
 
-  **Pendente:** ~~(a) revisão/homologação do PR pelo Alcides~~; (b) setup
-  manual da VPS + os 3 secrets no GitHub pra o deploy automático
-  funcionar (seção 7, `docs/DEPLOY-HOSTINGER-VPS.md`) — inclui também
-  confirmar como o site que já está no ar hoje
-  (`mecos.srv1697060.hstgr.cloud`) foi originalmente configurado, já
-  que pode ser um mecanismo diferente do workflow novo; (c) deploy
-  manual da Cloud Function + configuração da senha de app (seção 6.12);
-  (d) tudo que já estava pendente da v0.5.0 (regra do Firestore, dado de
-  teste, tenant órfão — ver callouts no topo do arquivo), que esta sessão
-  não tocou.
+  **Atualização (2026-09-09):** o Alcides executou o setup manual da VPS
+  com sucesso — Node.js, PM2, clone do repo, `npm install`, `npm run build`,
+  e inicialização do processo `mecos` em PM2. Sistema agora está **LIVE em
+  produção** em https://mecos.srv1697060.hstgr.cloud/ com as três melhorias
+  ativas (Termo de Garantia, Km + Aviso de Retorno, Painel de Retorno) e
+  funcionando conforme esperado.
+
+  **Pendente:** ~~(a) revisão/homologação do PR pelo Alcides~~; ~~(b) setup
+  manual da VPS~~; (b) os 3 secrets no GitHub (HOSTINGER_HOST/USER/PASS)
+  pra ativar deploy automático (workflow dispara a cada push pra `main`,
+  sem precisar de comandos manuais na VPS) — ver seção 7 e
+  `docs/DEPLOY-HOSTINGER-VPS.md`; (c) deploy manual da Cloud Function +
+  configuração da senha de app (seção 6.12) — necessário pra ativar o botão
+  "📧 Enviar aviso de retorno"; (d) tudo que já estava pendente da v0.5.0
+  (publicar regra do Firestore, decidir sobre dado de teste "Maria Testando
+  Balcao" e tenant órfão "35alcides" — ver callouts no topo do arquivo),
+  que esta sessão não tocou.
 
 - **v0.5.0** (2026-08-17) — Reconcepção completa depois do Alcides reprovar
   a v0.4.2 com 3 reclamações concretas (print em mãos). Resolve as três:
