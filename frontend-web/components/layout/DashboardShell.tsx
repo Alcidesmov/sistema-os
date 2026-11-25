@@ -56,6 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Gestão',
     items: [
       { href: '/reports', label: 'Relatórios' },
+      { href: '/estoque', label: 'Estoque' },
       { href: '/oficina', label: 'Oficina', gestor: true },
       { href: '/usuarios', label: 'Usuários', gestor: true },
       { href: '/feedback', label: 'Melhorias' },
@@ -233,6 +234,13 @@ export default function DashboardShell({
           </button>
           <span className="text-sm font-semibold text-gray-900 md:hidden">MecOS</span>
           <BuscaGlobal className="ml-auto w-full max-w-xl" />
+          <button
+            onClick={handleSignOut}
+            className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100"
+            title="Sair do sistema"
+          >
+            Sair
+          </button>
         </header>
 
         {/* pb-24: o botão flutuante de melhorias cobria o rodapé da tela. */}

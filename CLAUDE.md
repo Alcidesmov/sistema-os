@@ -800,6 +800,23 @@ dentro da OS. Um lembrete agendado de verdade exigiria trabalho futuro.
 > Atualizar esta seção a cada mudança relevante — resumo curto, não
 > changelog verboso linha-a-linha (isso já existe no `git log`).
 
+- **v0.7.0** (2026-11-25, consolidação em `main` pendente de homologação)
+  — Traz pra linha principal o trabalho que estava só na branch
+  `claude/oi-oe95jt` (nascida antes do merge da v0.6.0): **módulo de
+  Gestão de Estoque** (`app/(app)/estoque/page.tsx`, aba nova em
+  `/reports`, tipos e funções em `lib/types` e `lib/firebase/firestore.ts`)
+  e **botão Sair** no header + página `/logout` de emergência. Merge
+  automático sem conflito com a v0.6.1. Também corrigido o
+  `frontend-web/package-lock.json`, que estava fora de sincronia com o
+  `package.json` desde a v0.6.1 (faltavam `nodemailer`/`firebase-admin`) —
+  o workflow de deploy usa `npm ci`, que falharia por isso. **Verificado:**
+  `tsc --noEmit` limpo; `next build` compila e passa na checagem de tipos,
+  mas aborta na coleta da rota `/api/send-return-reminder` sem
+  `FIREBASE_SERVICE_ACCOUNT_KEY` válida no ambiente (a rota inicializa o
+  `firebase-admin` na importação) — ou seja, **o build da VPS depende
+  dessa variável existir**; fragilidade conhecida, não corrigida aqui.
+  **Não verificado:** a tela de Estoque rodando de verdade no navegador.
+
 - **v0.6.0** (2026-09-07) — Três melhorias pedidas pelo Alcides, feitas
   numa sessão remota (Claude Code on the web, branch `claude/oi-oe95jt`)
   em duas rodadas — as duas primeiras vieram do pedido original, a

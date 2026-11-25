@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useClientId } from '@/lib/hooks/useClientId'
-import { watchCustomers, watchOrders, watchVehicles } from '@/lib/firebase/firestore'
-import { Customer, Order, Vehicle, VEHICLE_TYPE_LABEL, VehicleType, WorkStatus } from '@/lib/types'
+import { watchCustomers, watchInventory, watchOrders, watchServices, watchVehicles } from '@/lib/firebase/firestore'
+import { Customer, InventoryItem, Order, ServiceItem, Vehicle, VEHICLE_TYPE_LABEL, VehicleType, WorkStatus } from '@/lib/types'
 import { STATUS_LABEL, statusColorOf, statusLabelOf, statusOf } from '@/lib/orders/status'
 import {
   completedAtOf,
@@ -21,7 +21,7 @@ import { porCliente, porTipoVeiculo, porVeiculo } from '@/lib/orders/aggregate'
 import { normalize } from '@/lib/utils/search'
 import { Esteira } from '@/components/esteira/Esteira'
 
-type TabKey = 'aberto' | 'os' | 'cliente' | 'veiculo' | 'tipo'
+type TabKey = 'aberto' | 'os' | 'cliente' | 'veiculo' | 'tipo' | 'estoque'
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'aberto', label: 'Em aberto' },
@@ -29,6 +29,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'cliente', label: 'Por cliente' },
   { key: 'veiculo', label: 'Por veículo' },
   { key: 'tipo', label: 'Por tipo de veículo' },
+  { key: 'estoque', label: 'Estoque' },
 ]
 
 /** Qual data ancora o período — o dono precisa ver isso escrito na tela. */
@@ -65,6 +66,8 @@ export default function ReportsPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [inventory, setInventory] = useState<InventoryItem[]>([])
+  const [services, setServices] = useState<ServiceItem[]>([])
 
   const [tab, setTab] = useState<TabKey>('aberto')
   const [from, setFrom] = useState('')
@@ -79,10 +82,14 @@ export default function ReportsPage() {
     const u1 = watchOrders(clientId, setOrders)
     const u2 = watchVehicles(clientId, setVehicles)
     const u3 = watchCustomers(clientId, setCustomers)
+    const u4 = watchInventory(clientId, setInventory)
+    const u5 = watchServices(clientId, setServices)
     return () => {
       u1()
       u2()
       u3()
+      u4()
+      u5()
     }
   }, [clientId])
 
@@ -211,6 +218,8 @@ export default function ReportsPage() {
 
       {tab === 'aberto' ? (
         <Esteira orders={orders} vehicles={vehicles} customers={customers} />
+      ) : tab === 'estoque' ? (
+        <EstoqueTab inventory={inventory} services={services} />
       ) : (
         <>
           {/* Cabeçalho comum das abas 2 a 5 */}
@@ -463,6 +472,167 @@ export default function ReportsPage() {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+function EstoqueTab({
+  inventory,
+  services,
+}: {
+  inventory: InventoryItem[]
+  services: ServiceItem[]
+}) {
+  const [buscaEstoque, setBuscaEstoque] = useState('')
+  const serviceMap = new Map(services.map((s) => [s.id, s]))
+
+  const filtrado = inventory.filter((item) => {
+    if (!buscaEstoque) return true
+    const svc = serviceMap.get(item.serviceItemId)
+    const q = normalize(buscaEstoque)
+    return normalize(svc?.name ?? '').includes(q) || normalize(svc?.code ?? '').includes(q)
+  })
+
+  const totalEstoque = filtrado.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
+
+  function exportarEstoqueCSV() {
+    const rows: (string | number)[][] = [
+      ['Peça/Serviço', 'Código', 'Tipo', 'Qtd.', 'Preço unit.', 'Total', 'Mín.', 'Data entrada', 'Status'],
+      ...filtrado.map((item) => {
+        const svc = serviceMap.get(item.serviceItemId)
+        const min = item.minQuantity ?? 0
+        const st = item.quantity < 0 ? 'Crítico' : (min > 0 && item.quantity <= min ? 'Baixo' : 'OK')
+        return [
+          svc?.name ?? '—',
+          svc?.code ?? '',
+          svc?.type === 'part' ? 'Peça' : 'Serviço',
+          item.quantity,
+          item.unitPrice.toFixed(2),
+          (item.quantity * item.unitPrice).toFixed(2),
+          item.minQuantity ?? '',
+          new Date(item.entryDate).toLocaleDateString('pt-BR'),
+          st,
+        ]
+      }),
+    ]
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `estoque-${Date.now()}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex-1">
+          <label className="mb-1 block text-xs font-medium text-gray-600">Buscar peça</label>
+          <input
+            value={buscaEstoque}
+            onChange={(e) => setBuscaEstoque(e.target.value)}
+            placeholder="Nome ou código da peça"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm md:max-w-md"
+          />
+        </div>
+        <button
+          onClick={exportarEstoqueCSV}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Exportar CSV
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-medium text-gray-500">Itens em estoque</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">{filtrado.length}</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-medium text-gray-500">Valor total</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">
+            {totalEstoque.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </p>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-xs font-medium text-gray-500">Itens críticos/baixos</p>
+          <p className="mt-1 text-2xl font-bold text-red-600">
+            {filtrado.filter((i) => i.quantity < 0 || (i.minQuantity && i.quantity <= i.minQuantity)).length}
+          </p>
+        </div>
+      </div>
+
+      <Card title="Posição de estoque por peça">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
+            <tr>
+              <th className="px-4 py-3">Peça / Serviço</th>
+              <th className="px-4 py-3 text-right">Qtd.</th>
+              <th className="px-4 py-3 text-right">Preço unit.</th>
+              <th className="px-4 py-3 text-right">Total</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Data entrada</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {filtrado.map((item) => {
+              const svc = serviceMap.get(item.serviceItemId)
+              const total = item.quantity * item.unitPrice
+              const min = item.minQuantity ?? 0
+              let stLabel = 'OK'
+              let stCls = 'bg-green-100 text-green-700'
+              if (item.quantity < 0) { stLabel = 'Crítico'; stCls = 'bg-red-100 text-red-700' }
+              else if (min > 0 && item.quantity <= min) { stLabel = 'Baixo'; stCls = 'bg-amber-100 text-amber-700' }
+              return (
+                <tr key={item.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-900">{svc?.name ?? '—'}</p>
+                    {svc?.code && <p className="text-xs text-gray-400">{svc.code}</p>}
+                  </td>
+                  <td className={`px-4 py-3 text-right font-mono ${item.quantity < 0 ? 'text-red-600 font-semibold' : 'text-gray-900'}`}>
+                    {item.quantity}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-gray-900">
+                    {item.unitPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-gray-900">
+                    {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${stCls}`}>
+                      {stLabel}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {new Date(item.entryDate).toLocaleDateString('pt-BR')}
+                  </td>
+                </tr>
+              )
+            })}
+            {filtrado.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                  Nenhum item em estoque
+                </td>
+              </tr>
+            )}
+          </tbody>
+          {filtrado.length > 0 && (
+            <tfoot className="bg-gray-50">
+              <tr>
+                <td className="px-4 py-2 text-sm font-semibold text-gray-700">Total</td>
+                <td /><td />
+                <td className="px-4 py-2 text-right font-mono font-semibold text-gray-900">
+                  {totalEstoque.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </Card>
     </div>
   )
 }
