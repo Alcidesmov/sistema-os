@@ -27,6 +27,8 @@ import {
   ApprovalChannel,
   PaymentMethod,
   VehicleType,
+  InventoryItem,
+  InventoryTransaction,
 } from '@/lib/types'
 import { activeInvoiceProvider } from '@/lib/invoices/provider'
 
@@ -340,6 +342,11 @@ export async function approveOrder(
   }
 ) {
   const now = Date.now()
+
+  // Lê a OS pra decrementar estoque (v0.7.0)
+  const orderSnap = await getDoc(orderRef(clientId, orderId))
+  const order = orderSnap.data() as Order | undefined
+
   await updateDoc(orderRef(clientId, orderId), {
     status: 'em_servico' as OrderStatus,
     quoteApprovedAt: now,
@@ -350,6 +357,12 @@ export async function approveOrder(
     ...(data.executionEstimatedEnd ? { executionEstimatedEnd: data.executionEstimatedEnd } : {}),
     updatedAt: now,
   })
+
+  // Decrementar estoque quando aprova (v0.7.0)
+  if (order?.items && order.items.length > 0) {
+    await decrementInventoryForOrder(clientId, orderId, order.items, data.approvedBy)
+  }
+
   await logOrderEvent(clientId, orderId, data.approvedBy, 'orçamento aprovado', data.approvalChannel)
 }
 
@@ -385,12 +398,23 @@ export async function deliverOrder(
 /** Cancelamento é SOFT — a O.S. nunca some, some do fluxo. */
 export async function cancelOrder(clientId: string, orderId: string, reason: string, by = '') {
   const now = Date.now()
+
+  // Lê a OS para reverter estoque se tiver sido aprovada (v0.7.0)
+  const orderSnap = await getDoc(orderRef(clientId, orderId))
+  const order = orderSnap.data() as Order | undefined
+
   await updateDoc(orderRef(clientId, orderId), {
     status: 'cancelado' as OrderStatus,
     cancelledAt: now,
     cancelReason: reason,
     updatedAt: now,
   })
+
+  // Incrementar estoque se OS estava em 'em_servico' (v0.7.0)
+  if (order && (order.status === 'em_servico' || order.status === 'finalizado') && order.items && order.items.length > 0) {
+    await incrementInventoryForOrder(clientId, orderId, order.items, by)
+  }
+
   await logOrderEvent(clientId, orderId, by, 'O.S. cancelada', reason)
 }
 
@@ -556,4 +580,201 @@ export async function createFeedback(
     status: 'new' as const,
     createdAt: Date.now(),
   })
+}
+
+// --- Inventory (v0.7.0) ---
+
+export function watchInventory(clientId: string, cb: (items: InventoryItem[]) => void) {
+  const q = query(
+    col(clientId, 'inventory'),
+    orderBy('entryDate', 'desc')
+  )
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as InventoryItem))
+      .filter((item) => !item.deletedAt)
+    )
+  })
+}
+
+export async function getInventoryItem(clientId: string, itemId: string): Promise<InventoryItem | null> {
+  const docSnap = await getDoc(doc(db, 'clients', clientId, 'inventory', itemId))
+  if (!docSnap.exists()) return null
+  return { id: docSnap.id, ...docSnap.data() } as InventoryItem
+}
+
+export async function createInventoryItem(
+  clientId: string,
+  data: {
+    serviceItemId: string
+    quantity: number
+    unitPrice: number
+    entryDate: number
+    minQuantity?: number
+  },
+  by: string
+) {
+  const now = Date.now()
+  const docRef = await addDoc(col(clientId, 'inventory'), {
+    ...data,
+    clientId,
+    lastUpdatedAt: now,
+  })
+
+  await addDoc(
+    collection(db, 'clients', clientId, 'inventory', docRef.id, 'transactions'),
+    {
+      inventoryItemId: docRef.id,
+      type: 'entrada' as const,
+      quantity: data.quantity,
+      unitPrice: data.unitPrice,
+      date: now,
+      by,
+      notes: 'Entrada inicial',
+    }
+  )
+
+  return docRef.id
+}
+
+export async function updateInventoryItem(
+  clientId: string,
+  itemId: string,
+  data: {
+    quantity?: number
+    unitPrice?: number
+    minQuantity?: number
+  },
+  by: string
+) {
+  const now = Date.now()
+  const before = await getInventoryItem(clientId, itemId)
+  if (!before) throw new Error('Item não encontrado')
+
+  await updateDoc(doc(db, 'clients', clientId, 'inventory', itemId), {
+    ...data,
+    lastUpdatedAt: now,
+  })
+
+  // Registrar transação se quantidade mudou
+  if (data.quantity !== undefined && data.quantity !== before.quantity) {
+    const delta = data.quantity - before.quantity
+    await addDoc(
+      collection(db, 'clients', clientId, 'inventory', itemId, 'transactions'),
+      {
+        inventoryItemId: itemId,
+        type: delta > 0 ? ('entrada' as const) : ('saida' as const),
+        quantity: Math.abs(delta),
+        unitPrice: data.unitPrice ?? before.unitPrice,
+        date: now,
+        by,
+        notes: 'Ajuste manual',
+      }
+    )
+  }
+}
+
+export async function updateInventoryQuantity(
+  clientId: string,
+  itemId: string,
+  delta: number,
+  by: string,
+  notes?: string
+) {
+  const item = await getInventoryItem(clientId, itemId)
+  if (!item) throw new Error('Item não encontrado')
+
+  const newQuantity = item.quantity + delta
+  const now = Date.now()
+
+  await updateDoc(doc(db, 'clients', clientId, 'inventory', itemId), {
+    quantity: newQuantity,
+    lastUpdatedAt: now,
+  })
+
+  await addDoc(
+    collection(db, 'clients', clientId, 'inventory', itemId, 'transactions'),
+    {
+      inventoryItemId: itemId,
+      type: delta > 0 ? ('entrada' as const) : ('saida' as const),
+      quantity: Math.abs(delta),
+      unitPrice: item.unitPrice,
+      date: now,
+      by,
+      notes: notes || undefined,
+    }
+  )
+}
+
+export async function deleteInventoryItem(clientId: string, itemId: string, by: string) {
+  const now = Date.now()
+  await updateDoc(doc(db, 'clients', clientId, 'inventory', itemId), {
+    deletedAt: now,
+    lastUpdatedAt: now,
+  })
+}
+
+export async function decrementInventoryForOrder(
+  clientId: string,
+  orderId: string,
+  items: OrderLineItem[],
+  by: string
+) {
+  for (const item of items) {
+    if (!item.itemId) continue
+
+    // Procurar no estoque
+    const snap = await getDocs(
+      query(
+        col(clientId, 'inventory'),
+        orderBy('entryDate', 'desc')
+      )
+    )
+
+    const invItem = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as InventoryItem))
+      .find((inv) => inv.serviceItemId === item.itemId && !inv.deletedAt)
+
+    if (invItem) {
+      await updateInventoryQuantity(
+        clientId,
+        invItem.id,
+        -item.quantity,
+        by,
+        `O.S. ${orderId}: ${item.quantity} unidade(s) usada(s)`
+      )
+    }
+  }
+}
+
+export async function incrementInventoryForOrder(
+  clientId: string,
+  orderId: string,
+  items: OrderLineItem[],
+  by: string
+) {
+  for (const item of items) {
+    if (!item.itemId) continue
+
+    const snap = await getDocs(
+      query(
+        col(clientId, 'inventory'),
+        orderBy('entryDate', 'desc')
+      )
+    )
+
+    const invItem = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as InventoryItem))
+      .find((inv) => inv.serviceItemId === item.itemId && !inv.deletedAt)
+
+    if (invItem) {
+      await updateInventoryQuantity(
+        clientId,
+        invItem.id,
+        item.quantity,
+        by,
+        `Revertido: O.S. ${orderId} cancelada`
+      )
+    }
+  }
 }

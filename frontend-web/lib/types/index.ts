@@ -282,3 +282,30 @@ export interface OrderEvent {
   action: string
   detail?: string
 }
+
+/** Posição de estoque por peça (v0.7.0). */
+export interface InventoryItem {
+  id: string
+  clientId: string
+  serviceItemId: string
+  quantity: number
+  minQuantity?: number
+  unitPrice: number
+  entryDate: number
+  lastUpdatedAt: number
+  deletedAt?: number
+}
+
+/** Histórico de movimentação de estoque (v0.7.0). */
+export interface InventoryTransaction {
+  id: string
+  inventoryItemId: string
+  type: 'entrada' | 'saida'
+  quantity: number
+  unitPrice: number
+  date: number
+  by: string
+  notes?: string
+  relatedOrderId?: string
+  relatedInvoiceId?: string
+}
